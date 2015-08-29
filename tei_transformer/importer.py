@@ -5,7 +5,10 @@ except ImportError:
     custom_teitag = None
 try:
 	from resources import config
+	config = config
 except ImportError:
-	from .examples import config
-
-config = config
+	try:
+		from .examples import config
+		config = config
+	except ImportError:
+		pass
