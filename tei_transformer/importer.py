@@ -11,4 +11,4 @@ except ImportError:
 		from .examples import config
 		config = config
 	except ImportError:
-		pass
+		config = None
