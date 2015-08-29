@@ -24,7 +24,7 @@ setup(
     },
 
     # Details
-    url="http://example.com",
+    url="https://github.com/thomasowenmclean/tei_transformer",
 
     #
     license="GPL",
