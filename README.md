@@ -22,7 +22,7 @@ pip install tei_transformer
 
 # Interested?
 
-Read the docs for more.
+[Read the docs](http://tei-transformer.readthedocs.org/en/latest/index.html) for more.
 
 
 
