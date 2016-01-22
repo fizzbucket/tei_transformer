@@ -428,9 +428,8 @@ class FilterTag(TEITag):
     def filterchildren(self, targets):
         searchtargets = map(lambda s: '{*}%s' % s, targets)
         for x in self.iterchildren(searchtargets):
-            if x.localname in targets:
-                yield x.localname, x
-                targets.remove(x.localname)
+            yield x.localname, x
+            targets.remove(x.localname)
 
         if len(targets) != 0:
             self._raise()
