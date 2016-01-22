@@ -18,9 +18,9 @@ class TEITag(etree.ElementBase):
     def _init(self):
         self._localname = None
         if self.text:
-            self.text = self._text_to_latex(self.text)
+            self.text = self._process_text_contents(self.text)
         if self.tail:
-            self.tail = self._text_to_latex(self.tail)
+            self.tail = self._process_text_contents(self.tail)
 
     def process(self, persdict=None, in_body=True):
 
@@ -41,33 +41,41 @@ class TEITag(etree.ElementBase):
 
     @property
     def localname(self):
+        """Tag name without namespace"""
         if not self._localname:
             self._localname = etree.QName(self).localname
         return self._localname
 
     def no_children(self):
+        """Return true if self has no children"""
         return len(self) == 0
     
-    def _text_to_latex(self, text):
+    def _process_text_contents(self, text):
+        """Function called to manipulate text in tags or tail when first parsed.
+        Currently takes no action; might be used, for example, to replace unicode with latex symbols"""
         return text
 
     def __str__(self):
         return etree.tounicode(self, with_tail=False)
 
     def descendants_count(self):
+        """Return the number of descendants"""
         if self.no_children():
             return 0
         else:
             return sum(1 for _ in self.iterdescendants())
 
     def delete(self):
+        """Remove this tag from the tree, preserving its tail"""
         parent = self.add_to_previous(self.tail)
         parent.remove(self)
 
     def get_replacement(self):
+        """Called to get a string replacement for a tag"""
         raise NotImplementedError(self)
 
     def unwrap(self):
+        """Replace tag with contents, including children"""
         children = list(self.iterchildren(reversed=True))
         if not len(children):
             self.replace_w_str(self.text)
@@ -81,11 +89,13 @@ class TEITag(etree.ElementBase):
                 parent.insert(index, child)
 
     def replace_w_str(self, replacement):
+        """Replace tag with string"""
         replacement = self.textjoin(replacement, self.tail)
         parent = self.add_to_previous(replacement)
         parent.remove(self)
 
     def add_to_previous(self, addition):
+        """Add text to the previous tag"""
         previous = self.getprevious()
         parent = self.getparent()
         if previous is not None:
@@ -96,9 +106,11 @@ class TEITag(etree.ElementBase):
 
     @staticmethod
     def textjoin(a, b):
+        """Join a and b, replacing either with an empty string if their value is not True"""
         return ''.join([(a or ''), (b or '')])
 
     def _raise(self):
+        """Raise an implemenation error with self as argument"""
         raise ImplementationError(self)
 
 
@@ -607,53 +619,36 @@ class Quote(RendTag):
 
 class DeleteMe(TEITag):
 
+    """Delete tags of this type"""
+
+    target = ['lb']
+
     def get_replacement(self):
         return self.delete()
 
 class DontTouchMe(TEITag):
+
+    """Take no action with tags of this type"""
+
+    target = ['corr', 'sic', 'lem', 'rdg']
 
     def get_replacement(self):
         return None
 
 class ReplaceMeWText(TEITag):
 
+    """Replace tags of this type with their text"""
+
+    target = ['body', 'time', 'list', 'item', 'name']
+
     def get_replacement(self):
         return self.text
 
 class UnWrapMe(TEITag):
 
+    """Unwrap tags of this type"""
+
+    target = ['subst']
+
     def get_replacement(self):
         return self.unwrap()
-
-class Body(ReplaceMeWText):
-    target = 'body'
-
-class Corr(DontTouchMe):
-    target = 'corr'
-
-class Sic(DontTouchMe):
-    target = 'sic'
-
-class Lemma(DontTouchMe):
-    target = 'lem'
-
-class VariantReading(DontTouchMe):
-    target = 'rdg'
-
-class Time(ReplaceMeWText):
-    target = 'time'
-
-class LineBreak(DeleteMe):
-    target = 'lb'
-
-class Subst(UnWrapMe):
-    target = 'subst'
-
-class List(ReplaceMeWText):
-    target = 'list'
-
-class ListItem(ReplaceMeWText):
-    target = 'item'
-
-class Name(ReplaceMeWText):
-    target = 'name'

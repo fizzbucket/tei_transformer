@@ -155,7 +155,11 @@ class Parser():
         namespace[None] = TEITag
         # Map the target to handling class in the lxml parser.
         for cls in self.tag_classes():
-            namespace[cls.target] = cls
+            if isinstance(cls.target, list):
+                for target in cls.target:
+                    namespace[target] = cls
+            else:
+                namespace[cls.target] = cls
 
     def __call__(self, textpath):
         try:
