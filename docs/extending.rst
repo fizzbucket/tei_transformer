@@ -16,7 +16,7 @@ We use a standard parser, lxml, to make sense of a tei-encoded lxml file. This p
 
 If the replacement is ``None``, a tag is not replaced.
 
-This seems quite complicated -- and it can get as complicated as you like -- but its usage is very simple. Here is, for example, the complete class ``SoCalled``, which handles tags of the type ``<soCalled>``
+This seems quite complicated -- and it can get as complicated as you like -- but its usage is very simple. Here is, for example, is more or less the complete class ``SoCalled``, which handles tags of the type ``<soCalled>``
 
 .. code-block:: python
 
@@ -29,9 +29,9 @@ This seems quite complicated -- and it can get as complicated as you like -- but
 
 The only point which might need explanation is where ``self.text`` comes from; it is, of course, the text contained within the tag. Because the class SoCalled inherits from the class ``TEITag``, and ``TEITag`` inherits from the class ``LXML.etree.ElementBase``, all the methods available to ``ElementBase`` can be called to find out more about the tag. See the API documentation under ``TEITag`` to see what is available. These mean that any information from within the parse tree you want to find out is easily accessible.
 
-For example, getting the attribute 'rend' for a tag is as simple as::
+For example, getting the attribute 'hello_world' for a tag is as simple as::
 
-	self.get('rend')
+	self.get('hello_world')
 
 There is one proviso, though: unlike XSLT, tags are replaced one-at-a-time, rather than simultaneously. To make this a bit more logical, tags are not replaced in document order, but, weakly-sorted, by the number of descendants.
 
@@ -42,11 +42,8 @@ Several methods are also available for tags beyond those defined by lxml.etree; 
 Overriding an existing class, or adding a new one
 _________________________________________________
 
-So you don't agree with the way a tag is processed?
+Almost certainly, you'll be wanting to override things.
 
-Or you want to use a tag that doesn't have a handling class?
+Tag handling classes are pretty simple, as above. What you want to do is rather than using the command deal with the classes making up the application instead.
 
-Cool cool cool.
-
-Just save a new file, ``custom_teitag.py`` in the ``resources`` directory. Then add whatever new classes you want in there. They'll be automagically included, and if their target is already defined by another class, they'll override that one, and we can all carry on happily.
-
+Have a look at the source; it's very short and kept deliberately simple rather than hyper-efficient.

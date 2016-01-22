@@ -6,18 +6,19 @@ So what we have here is conceptually as much a framework for your own changes as
 
 # Installation
 
-pip install tei_transformer
+pip3 install tei_transformer
 
 # Simple usage
 
-	from tei_transformer.XMLProcessingWrapper import xml_to_tex
+	from tei_transformer import transform
 
 	xmlpath = 'example.xml'
-	tex = xml_to_tex(xmlpath)
+	transformer = transform.TransformToPDF()
+	transformer.transform()
+	
 
 # Complete toolchain
 
-	tei_transformer --new-project
 	tei_transformer --transform example.xml
 
 # Interested?
