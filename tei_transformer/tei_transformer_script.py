@@ -1,7 +1,6 @@
 import argparse
-import os
-import shutil
 from tei_transformer import transform
+
 
 def get_args():
     parser = argparse.ArgumentParser(
@@ -24,7 +23,12 @@ def get_args():
 def main():
     args = get_args()
     if args.transform:
-        transformer = transform.TransformToPDF(args.transform, args.outputname, args.force, args.quiet)
+        transformer = transform.TransformToPDF(
+            args.transform,
+            args.outputname,
+            args.force,
+            args.quiet
+            )
         transformer.transform()
 
 if __name__ == '__main__':

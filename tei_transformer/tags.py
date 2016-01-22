@@ -9,9 +9,12 @@ LANGUAGES = {
     'gr': 'greek',
 }
 
+XML_NAMESPACE = '{http://www.w3.org/XML/1998/namespace}'
+
 
 class ImplementationError(Exception):
     pass
+
 
 class TEITag(etree.ElementBase):
 
@@ -27,17 +30,16 @@ class TEITag(etree.ElementBase):
         # Check to see we won't accidentally wipe something out.
         not_good_children = self.localname not in ['choice', 'app']
         if not self.no_children() and not_good_children:
-            self._raise()
+            self.raise_()
         # Now on with the replacement.
         if self.localname == 'persName':
             replacement = self.get_replacement(persdict, in_body)
         else:
             replacement = self.get_replacement()
         if not replacement:
-            return # i.e. don't touch this; it will be processed later by a parent.
+            return  # i.e. don't touch this.
         else:
             self.replace_w_str(replacement)
-
 
     @property
     def localname(self):
@@ -49,10 +51,11 @@ class TEITag(etree.ElementBase):
     def no_children(self):
         """Return true if self has no children"""
         return len(self) == 0
-    
+
     def _process_text_contents(self, text):
         """Function called to manipulate text in tags or tail when first parsed.
-        Currently takes no action; might be used, for example, to replace unicode with latex symbols"""
+        Currently takes no action; might be used,
+        for example, to replace unicode with latex symbols"""
         return text
 
     def __str__(self):
@@ -106,20 +109,19 @@ class TEITag(etree.ElementBase):
 
     @staticmethod
     def textjoin(a, b):
-        """Join a and b, replacing either with an empty string if their value is not True"""
+        """Join a and b, replacing either with an empty string
+        if their value is not True"""
         return ''.join([(a or ''), (b or '')])
 
-    def _raise(self):
+    def raise_(self):
         """Raise an implemenation error with self as argument"""
         raise ImplementationError(self)
-
-
 
     def required_key(self, key):
         x = self.get(key)
         if x:
             return x
-        self._raise()
+        self.raise_()
 
     def ex_ref(self, key):
         key = self.required_key(key)
@@ -134,7 +136,7 @@ class TEITag(etree.ElementBase):
         if required:
             return self.required_key('n')
         return self.get('n')
-    
+
     def key_or_empty(self, key):
         return self.get(key) or ''
 
@@ -146,33 +148,31 @@ class Head(TEITag):
     target = 'head'
 
     def get_replacement(self):
-    
+
         """ Return the replacement for a tag of type <head>"""
 
         # Make explicit the desire not to indent following paragraph.
         if not self.tail or not self.tail.strip():
             next_sibling = self.getnext()
             if next_sibling is not None and next_sibling.localname == 'p':
-                if next_sibling.get('rend') == None:
+                if next_sibling.get('rend') is None:
                     next_sibling.text = '\\noindent %s' % (next_sibling.text or '')
 
         parent_attrs = self.getparent().attrib
         div_type = parent_attrs['type']
-        # if div_type == None: # Part
-        #     return self.process_head_level_one(contents)
-        if div_type == 'title': # Chapter
+        if div_type == 'title':  # Chapter
             return self.process_head_level_two()
 
         try:
             identifier = parent_attrs['%sid' % '{http://www.w3.org/XML/1998/namespace}']
         except KeyError:
-            self._raise()
+            self.raise_()
 
-        if div_type == 'diaryentry': # Section
+        if div_type == 'diaryentry':  # Section
             return self.process_head_level_three(identifier)
-        elif div_type == 'diaryentrysection': # Subsection
+        elif div_type == 'diaryentrysection':  # Subsection
             return self.process_head_level_four(identifier)
-        self._raise()
+        self.raise_()
 
     def process_head_level_one(self):
         return '\\part{%s}' % self.text
@@ -182,7 +182,7 @@ class Head(TEITag):
 
     def process_head_level_three(self, identifier):
         if identifier is None:
-            self._raise()
+            self.raise_()
         month = identifier[:3]
         # Assumes gregorian calendar
         for index, string in enumerate(calendar.month_abbr):
@@ -190,7 +190,7 @@ class Head(TEITag):
                 month = calendar.month_name[index]
                 break
         date = identifier[3:identifier.find('_')]
-        year = identifier[-4:]        
+        year = identifier[-4:]
         return '\n\\pstart\n\
                \\eledsection[%s %s %s]{%s}\n\
                \\label{%s}\n\
@@ -199,15 +199,15 @@ class Head(TEITag):
 
     def process_head_level_four(self, identifier):
         return '\\pstart\n\\eledsubsection{%s}\n\\label{%s}\n\\pend'\
-                % (self.text, identifier)
+            % (self.text, identifier)
 
     def process_head_level_five(self, identifier):
         return '\\pstart\n\\eledsubsubsection{%s}\n\\label{%s}\n\\pend'\
-                % (self.text, identifier)
+            % (self.text, identifier)
 
 
 class TextualNote(TEITag):
-    
+
     target = 'note'
 
     def get_replacement(self):
@@ -225,7 +225,7 @@ class TextualNote(TEITag):
 
     def get_marker(self):
         skip = 0
-        for n in self._previous_notes():
+        for n in self.itersiblings('{*}note', preceding=True):
             if n.text:
                 skip += 1
             else:
@@ -233,11 +233,6 @@ class TextualNote(TEITag):
                     return n
                 skip = skip - 1
         return False
-
-    def _previous_notes(self):
-        for sib in self.itersiblings(preceding=True):
-            if sib.localname == 'note':
-                yield sib
 
 
 class Div(TEITag):
@@ -275,7 +270,7 @@ class Paragraph(TEITag):
         try:
             paratext = self.text.strip()
         except AttributeError:
-            self._raise()
+            self.raise_()
         paratext = paratext.replace('\n', ' ')
         rend = self.rend()
         if rend == 'noindent':
@@ -317,15 +312,17 @@ class VerseLine(TEITag):
             self.text = self.text.strip()
         return '%s &\n' % self.text
 
+
 class Foreign(TEITag):
     target = 'foreign'
 
     def get_replacement(self):
-        langcode = self.get('%slang' % '{http://www.w3.org/XML/1998/namespace}')
+        langcode = self.get('%slang' % XML_NAMESPACE)
         language = LANGUAGES.get(langcode)
         if language:
             return '\\text%s{%s}' % (language, self.text)
         return self.text
+
 
 class FloatingText(TEITag):
     target = 'floatingText'
@@ -336,7 +333,8 @@ class FloatingText(TEITag):
             return '\n\\vspace{5mm}%s\\vspace{5mm}\n' % self.text
         elif floattype == 'addition':
             return '\\pstart %s\\pend' % self.text
-        self._raise()
+        self.raise_()
+
 
 class PersName(TEITag):
     target = 'persName'
@@ -344,14 +342,14 @@ class PersName(TEITag):
     def _init(self):
         super()._init()
         self.in_body_text = True
-        for x in self.iterancestors('{*}note'):
+        note_ancestors = self.iterancestors('{*}note')
+        if any(True for _ in note_ancestors):
             self.in_body_text = False
-            break
 
     def get_replacement(self, persdict, in_body):
         ref = self.ex_ref('ref')
         if not ref:
-            self._raise()
+            self.raise_()
         elif ref == '??':
             return '\\unknownperson{%s}' % self.text
 
@@ -370,7 +368,6 @@ class PersName(TEITag):
             return '\\person{%s}{%s}{%s}{%s}' % (ref, indexname, description, self.text)
 
 
-
 class Space(TEITag):
     target = 'space'
 
@@ -382,7 +379,7 @@ class Space(TEITag):
             return '\\hfill{}'
         else:
             return '\\qquad{}'
-        self._raise()
+        self.raise_()
 
 
 class PageBreak(TEITag):
@@ -390,21 +387,28 @@ class PageBreak(TEITag):
 
     def get_replacement(self):
 
-        pagenumber = self.attrib['n']
+        pagenumber = self.required_key('n')
         pagenumber = pagenumber.lstrip('0')
         if pagenumber == '1':
             return self.delete()
 
-        if self.tail is not None:
-            self.tail = self.tail.lstrip()
+        has_tail = self.tail is not None
         previous = self.getprevious()
-        if previous is not None:
-            if previous.tail:
-               previous.tail = previous.tail.rstrip()
+        has_previous = previous is not None
 
-        
+        if has_tail:
+            self.tail = self.tail.lstrip()
+        if has_previous:
+            if previous.tail:
+                previous.tail = previous.tail.rstrip()
+
         parent = self.getparent()
-        if parent.localname in ['p', 'lg'] :
+        try:
+            in_text = parent.localname in ['p', 'lg']
+        except AttributeError:
+            self.raise_()
+
+        if in_text:
             return ' \\intextpagebreak{[%s]} ' % pagenumber
         else:
             return '\n\\floatpagebreak{[%s]}\n' % pagenumber
@@ -427,13 +431,15 @@ class Deletion(TEITag):
         elif self.get('hand'):
             return '\\sout{%s}' % self.text
         else:
-            self._raise()
+            self.raise_()
+
 
 class Add(TEITag):
     target = 'add'
 
     def get_replacement(self):
         return '\\addition{%s}' % self.text
+
 
 class FilterTag(TEITag):
 
@@ -444,7 +450,7 @@ class FilterTag(TEITag):
             targets.remove(x.localname)
 
         if len(targets) != 0:
-            self._raise()
+            self.raise_()
 
 
 class Choice(FilterTag):
@@ -459,6 +465,7 @@ class Choice(FilterTag):
 
         return '\\correction{%s}{%s}' % (corr_text, sic_text)
 
+
 class TextualVariant(FilterTag):
     target = 'app'
 
@@ -469,7 +476,7 @@ class TextualVariant(FilterTag):
                 lem_text = tag.text
             elif name == 'rdg':
                 rdgs.append(tag)
-        
+
         rdgs = map(self.rdgs_map, rdgs)
         return '\\variants{%s}{%s}' % (lem_text, ' '.join(rdgs))
 
@@ -478,12 +485,11 @@ class TextualVariant(FilterTag):
         try:
             wit = rdg.attrib['wit']
         except KeyError:
-            rdg._raise()
+            rdg.raise_()
         return '\\wit{%s}{%s}' % (rdg.text, wit)
 
-
-
 # FURTHER SUBCLASSING.
+
 
 class FmtTag(TEITag):
 
@@ -537,14 +543,16 @@ class FmtTag(TEITag):
     def _none(self):
         return [None, 'none', 'None']
 
+
 class SoCalled(FmtTag):
     target = 'soCalled'
 
     def get_replacement(self):
         return self.single_quotes()
 
+
 class Ptr(FmtTag):
-    
+
     target = 'ptr'
 
     def get_replacement(self):
@@ -565,7 +573,7 @@ class Ptr(FmtTag):
         elif crossref:
             return '\\pageref{%s}' % target
 
-        self._raise()
+        self.raise_()
 
 
 class Supplied(FmtTag):
@@ -585,13 +593,12 @@ class RendTag(FmtTag):
                 (self._smcps(), self.smallcaps),
                 (self._none(), self.handle_none)]
 
-
     def _rendery(self, *args, **kwargs):
         rend = self.rend(*args, **kwargs)
         for targets, func in self.fmt_lists():
             if rend in targets:
                 return func()
-        self._raise()
+        self.raise_()
 
 
 class Bibl(RendTag):
@@ -600,11 +607,13 @@ class Bibl(RendTag):
     def get_replacement(self):
         return self._rendery()
 
+
 class Hi(RendTag):
     target = 'hi'
 
     def get_replacement(self):
         return self._rendery(required=True)
+
 
 class Quote(RendTag):
     target = 'q'
@@ -617,6 +626,7 @@ class Quote(RendTag):
 
 # SIMPLE ONES:
 
+
 class DeleteMe(TEITag):
 
     """Delete tags of this type"""
@@ -625,6 +635,7 @@ class DeleteMe(TEITag):
 
     def get_replacement(self):
         return self.delete()
+
 
 class DontTouchMe(TEITag):
 
@@ -635,6 +646,7 @@ class DontTouchMe(TEITag):
     def get_replacement(self):
         return None
 
+
 class ReplaceMeWText(TEITag):
 
     """Replace tags of this type with their text"""
@@ -643,6 +655,7 @@ class ReplaceMeWText(TEITag):
 
     def get_replacement(self):
         return self.text
+
 
 class UnWrapMe(TEITag):
 
