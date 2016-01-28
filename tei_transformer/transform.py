@@ -1,196 +1,128 @@
 import os
 import subprocess
-import hashlib
-import shutil
-import filecmp
 import re
+import textwrap
+import collections
 
 from .xmltotext import Transform
+from .pathsmanager import PathManager
+
+def transform_tei(inputname, outname=None, force=False, quiet=False):
+
+    paths = PathManager(inputname, outputname=outname)
+    bare_text = Transform(paths)
+    latex = LatexifiedText(bare_text, paths)
+    pdf = PDFMaker(latex, paths, force, quiet)
+
+class ConversionError(Exception):
+    pass
 
 
-class TransformToPDF():
+class LatexifiedText(collections.UserString):
+
+    def __init__(self, text, paths):
+        super().__init__(text)
+        self.paths = paths
+        self.before_latexify()
+        self.latexify()
+        self.after_latexify()
+
+    def before_latexify(self):
+        """Actions to take before text is latexified"""
+        pass
+
+    def latexify(self):
+        self.data = '\n'.join(self._document_parts())
+
+    def _document_parts(self):
+        for part in [self._preamble,
+                    self._after_preamble,
+                    self._after_text_start,
+                    self._get_base_text,
+                    self._after_text_end]:
+            yield part()
+
+    def _get_base_text(self):
+        return self.data
+
+    def _preamble(self):
+        """Return string to form the preamble of the latex document"""
+        return self.paths.preamble.read()
     
-    def __init__(self, inname, outname=None, force=False, quiet=False):
-        self.inname = inname
-        self.basename = self.inname[:self.inname.find('.')]
-        self.working_directory = os.path.join(os.curdir, 'working_directory')
-        self.outtex = os.path.join(self.working_directory, self.basename + '.tex')
-        if not outname:
-            self.outname = self.basename + '.pdf'
-        else:
-            self.outname = outname
+    def _after_preamble(self):
+        return self.paths.after_preamble.read()
+
+    def _after_text_start(self):
+        """Return string to include after '\\begin{document}' but before text"""
+        intro_stem = self.paths.introduction.stem
+        return self.paths.after_text_start.read()
+
+    def _after_text_end(self):
+        """Return string to include after text. Should end with '\\end{document}"""
+        appendices_stem = self.paths.appendices.stem
+        return self.paths.after_text_end.read()
+
+    def after_latexify(self):
+        """Actions to take after text is latexified."""
+        self._hyphenation_fixes()
+        self._custom_replacements()
+        self._whitespace_substitution()
+
+    def _whitespace_substitution(self):
+        """Normalise whitespace"""
+        wspaces = [(r'\ +', ' '), # Be a tidy kiwi.
+                (r'\n\ +', '\n'),
+                (r'\n\n+', '\n\n'),
+               ]
+        for match in wspaces:
+          self.data = re.sub(*match, self.data)
+
+
+    def _hyphenation_fixes(self):
+        """Add hyphenation points to words. Probably changes per project."""
+        self.data = self.data.replace('Horowhenua', 'Horo\-whenua')
+        self.data = self.data.replace('Trémouille', 'Tré\-mouille')
+
+    def _custom_replacements(self):
+        """Custom applications of replacements to text. Probably changes per project."""
+        self.data = self.data.replace('HQ. C.O.', 'HQ.~C.O.')
+        self.data = self.data.replace('C.O. Battalion', 'C.O.~Battalion')
+        self.data = re.sub(r'([A-Z.]{2,})\.\ (?=[A-Z])', r'\1\@. ', self.data)
+
+class PDFMaker():
+
+    def __init__(self, latex, paths, force, quiet):
+        self.latex = latex
         self.force = force
+        self.paths = paths
         self.quiet = quiet
-        self.resourcesdir = os.path.join(os.curdir, 'resources')
 
-    def transform(self):
-        self.check_requirements()
-        latex = self.make_latex()
-        pdf_path = self.make_pdf(latex)
-        self.on_pdf_creation(pdf_path)
+        self.worktex = self.paths.working_tex
+        self.workpdf = self.paths.working_pdf
 
-    def check_requirements(self):
-        if not os.path.exists(self.working_directory):
-            os.mkdir(self.working_directory)
+        if self.check_run():
+            self.make_pdf()
+        self.on_pdf_creation()
 
-        resource_files = ['references.bib',
-                      'personlist.xml',
-                      'introduction.tex',
-                      'latex_preamble.tex']
-        for name in resource_files:
-            inp = os.path.join(self.resourcesdir, name)
-            outp = os.path.join(self.working_directory, name)
-            assert os.path.isfile(inp)
+    def check_run(self):
+        no_pdf = not self.workpdf.exists()
+        no_tex = not self.worktex.exists()
 
-            no_out = not os.path.isfile(outp)
-            if no_out:
-                self._copy_required_file(inp, outp)
-            elif not filecmp.cmp(inp, outp):
-                self._copy_required_file(inp, outp)
-
-        i_s_p = os.path.join(self.working_directory, self.basename + '.mst')
-        if not os.path.isfile(i_s_p):
-            with open(i_s_p, 'w') as isty:
-                isty.write(self.index_style())
-
-
-    def _copy_required_file(self, in_, out_):
-        shutil.copy2(in_, out_)
-        self.force = True
-        if os.path.basename(in_) == 'personlist.xml':
-            picklepath = os.path.join(self.working_directory,
-                                'personlist.pickle')
-            if os.path.isfile(picklepath):
-                os.unlink(picklepath)
-
-
-    def make_latex(self):
-        t = self._get_transformer()
-        text = t()
-        pre = self.latex_preamble()
-        front = self.latex_front_matter()
-        after = self.latex_end_matter()
-
-        header = pre.replace(r'\begin{document}', front)
-        _all = '\n'.join([header, text, after])
-
-        return self._after_creation(_all)
-
-    def make_pdf(self, tex):
-        if not self.check_run(tex):
-            with open(self.outtex, 'w') as o:
-                o.write(tex)
-            result = self.call_latex()
+        if self.force or no_pdf or no_tex:
+            return True
+        elif not self.worktex.hash_compare(self.latex):
+            return True
         else:
             print('Has not changed since the last run')
-        return os.path.join(self.working_directory, self.basename + '.pdf')        
 
-    def on_pdf_creation(self, pdfpath):
-        shutil.copy(pdfpath, self.outname)
+    def on_pdf_creation(self):
+        self.workpdf.copy_to(self.paths.out_pdf)
 
-    def _get_transformer(self):
-        transformer = Transform(self.inname, self.working_directory)
-        return transformer.transform
-
-    def check_run(self, tex):
-        if not self.force:
-            if os.path.exists(self.outtex):
-                with open(self.outtex, 'rb') as exists:
-                    exists = exists.read()
-                existing_hash = hashlib.md5(exists).digest()
-                new_hash = hashlib.md5(tex.encode('utf8')).digest()
-                return existing_hash == new_hash
-        return False
-
-
-    def latex_front_matter(self):
-        return '\n'.join([
-            '\\begin{document}',
-            '\\frontmatter',
-            '\\tableofcontents',
-            '\setcounter{secnumdepth}{-2}',
-            #'\include{./introduction}',
-            '\mainmatter',
-            '\lineation{page}',
-            '\setlength{\stanzaindentbase}{30pt}',
-            '\setstanzaindents{3,1,1}',
-            '\setcounter{stanzaindentsrepetition}{1}',
-            '\\newcommand*{\startstanzahook}{\\vspace{9pt}}',
-            '\def\endstanzaextra{\\vspace{9pt}}',
-            #'\\allsectionsfont{\\normalsize}',
-            '\\beginnumbering',
-        ])
-
-
-    def latex_preamble(self):
-        prefile = os.path.join(self.working_directory, 'latex_preamble.tex')
-        with open(prefile) as r:
-            return r.read()
-
-    def latex_end_matter(self):
-        return '\n'.join([
-            '\endnumbering',
-            '\\backmatter'
-            '\clearpage',
-            #'\\rfoot{\\textsc{References} / \\thepage}',
-            '\printbibliography',
-            '\clearpage',
-            #'\\rfoot{\\textsc{Editorial Practice} / \\thepage}',
-            #'\\rfoot{\\textsc{Index / \\thepage}}',
-            '\printindex',
-            '\end{document}',
-        ])
-
-
-    def _after_creation(self, text):
-        for k, v in {
-            'i.e. ': 'i.e.\ ',
-            'e.g. ': 'e.g.\ ',
-            ' v. ': ' v.\ ',
-            ' w. ': ' w.\ ',
-            ' wh. ': ' wh.\ ',
-            'MG. ': 'MG.\@ ',
-            'HQ. ': 'HQ.\@ ',
-            'YMCA. ': 'YMCA.\@ ',
-            'ADS. ': 'ADS.\@ ',
-            'RMT. ': 'RMT.\@ ',
-            'NZ. ': 'NZ.\@ ',
-            'M.T. ': 'M.T.\@ ',
-            'Horowhenua': 'Horo\-whenua',
-            'HQ. C.O.': 'HQ.\@ C.O.',
-            'C.O. Battalion dinner': 'C.O.\@ Battalion dinner',
-            'GA. So': 'GA.\@ So',
-            'Trémouille': 'Tré\-mouille',
-            'or M&V.': 'or M\\&V.',
-            '∴': '\\texttherefore{}', 
-        }.items():
-            text = text.replace(k, v)
-        for char in '.,!)':
-            text = text.replace('-' + char, '---' + char)
-        hyphensubs = [(r'(?<=\d)-(?=\d)', '--'), # hyphens between numbers to en-dashes
-                    (r'(?<=\s)-(?=\s)', '---'), # hyphens surrounded by whitespace to em-dashes.
-                    ]
-        for sub in hyphensubs:
-            text = re.sub(sub[0], sub[1], text)
-        # Hyphens in our citations!
-        text = re.sub(r'\\pageref\{(.*?)--(.*?)\}',
-            r'\\pageref{\1-\2}', text)
-        text = re.sub(r'\\autocite\{(.*?)--(.*?)\}',
-            r'\\autocite{\1-\2}', text)
-        text = re.sub(r'\\label\{(.*?)--(.*?)\}',
-            r'\\label{\1-\2}', text)
-        text = text.replace('----)', '--)')
-        text = re.sub(r'\ +', ' ', text) # Be a tidy kiwi.
-        text = re.sub(r'\n\ +', '\n', text)
-        text = re.sub(r'\n\n+', '\n\n', text)
-        return text
-
-
-    def index_style(self):
-        return '\n'.join(['headings_flag 1',
-            'heading_prefix "{\\\\bfseries "',
-            'heading_suffix "}\\\\nopagebreak\\n"',
-            ])
+    def make_pdf(self):
+        self.worktex.write(str(self.latex))
+        self.call_latex()
+        if not self.workpdf.exists():
+            raise ConversionError('No PDF file was produced.')
 
     def call_latex(self):
         options = ['-bibtex', # run biber for references
@@ -198,7 +130,7 @@ class TransformToPDF():
            '-f', # force through errors
            '-g', # run even if unchanged.
            '-pdf',]
-        latexmk_command = ['latexmk'] + options + [self.outtex]
+        latexmk_command = ['latexmk'] + options + [str(self.worktex)]
         if self.quiet:
             with open(os.devnull, "w") as fnull:
                 return subprocess.call(latexmk_command, stdout = fnull, stderr = fnull)

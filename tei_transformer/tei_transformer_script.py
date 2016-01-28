@@ -23,13 +23,12 @@ def get_args():
 def main():
     args = get_args()
     if args.transform:
-        transformer = transform.TransformToPDF(
+        transform.transform_tei(
             args.transform,
-            args.outputname,
-            args.force,
-            args.quiet
+            outname=args.outputname,
+            force=args.force,
+            quiet=args.quiet
             )
-        transformer.transform()
 
 if __name__ == '__main__':
     main()

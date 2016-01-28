@@ -1,5 +1,8 @@
 from lxml import etree
 import calendar
+import sys
+
+from latexfixer.fix import LatexText
 
 LANGUAGES = {
     'it': 'italian',
@@ -85,7 +88,16 @@ class TEITag(etree.ElementBase):
             self.tail = self._process_text_contents(self.tail)
         self._descendants_count = None
 
-    # RICH COMPARISONS TO ALLOW SORTING
+    def __eq__(self, other):
+        return self.descendants_count == other.descendants_count
+
+    def __lt__(self, other):
+        return self.descendants_count < other.descendants_count
+
+    def __str__(self):
+        return etree.tounicode(self, with_tail=False)
+
+
     @property
     def descendants_count(self):
         if not self._descendants_count:
@@ -94,12 +106,13 @@ class TEITag(etree.ElementBase):
             else:
                 self._descendants_count = sum(1 for _ in self.iterdescendants())
         return self._descendants_count
-    
-    def __eq__(self, other):
-        return self.descendants_count == other.descendants_count
 
-    def __lt__(self, other):
-        return self.descendants_count < other.descendants_count
+    @property
+    def localname(self):
+        """Tag name without namespace"""
+        if not self._localname:
+            self._localname = etree.QName(self).localname
+        return self._localname
 
     def process(self, persdict=None, in_body=True):
 
@@ -112,17 +125,11 @@ class TEITag(etree.ElementBase):
             replacement = self.get_replacement(persdict, in_body)
         else:
             replacement = self.get_replacement()
-        if not replacement:
+        # We don't want to catch an empty string,
+        if replacement is None: # So we need the more specific test.
             return  # i.e. don't touch this.
         else:
             self.replace_w_str(replacement)
-
-    @property
-    def localname(self):
-        """Tag name without namespace"""
-        if not self._localname:
-            self._localname = etree.QName(self).localname
-        return self._localname
 
     def no_children(self):
         """Return true if self has no children"""
@@ -130,12 +137,8 @@ class TEITag(etree.ElementBase):
 
     def _process_text_contents(self, text):
         """Function called to manipulate text in tags or tail when first parsed.
-        Currently takes no action; might be used,
-        for example, to replace unicode with latex symbols"""
-        return text
-
-    def __str__(self):
-        return etree.tounicode(self, with_tail=False)
+        """
+        return LatexText(text)
 
     def delete(self):
         """Remove this tag from the tree, preserving its tail"""
@@ -176,14 +179,8 @@ class TEITag(etree.ElementBase):
             parent.text = self.textjoin(parent.text, addition)
         return parent
 
-    @staticmethod
-    def textjoin(a, b):
-        """Join a and b, replacing either with an empty string
-        if their value is not True"""
-        return ''.join([(a or ''), (b or '')])
-
     def raise_(self):
-        """Raise an implemenation error with self as argument"""
+        """Raise an implementation error with self as argument"""
         raise ImplementationError(self)
 
     def required_key(self, key):
@@ -191,6 +188,20 @@ class TEITag(etree.ElementBase):
         if x:
             return x
         self.raise_()
+
+    def _check_if_in_body(self):
+        note_ancestors = self.iterancestors('{*}note')
+        if any(True for _ in note_ancestors):
+            return False
+        return True
+
+
+    @staticmethod
+    def textjoin(a, b):
+        """Join a and b, replacing either with an empty string
+        if their value is not True"""
+        return ''.join([(a or ''), (b or '')])
+
 
 
 # STANDARD
@@ -216,7 +227,7 @@ class Head(TEITag):
             return self.process_head_level_two()
 
         try:
-            identifier = parent_attrs['%sid' % '{http://www.w3.org/XML/1998/namespace}']
+            identifier = parent_attrs['%sid' % XML_NAMESPACE]
         except KeyError:
             self.raise_()
 
@@ -290,14 +301,26 @@ class TextualNote(TEITag):
 class Paragraph(TEITag):
     target = 'p'
 
-
     def get_replacement(self):
+
+        in_bio = self.getparent().localname == 'trait'
+
+        if in_bio:
+            if not self.text:
+                return ''
         try:
             self.text = self.text.strip()
         except AttributeError:
             self.raise_()
 
         paratext = self.text.replace('\n', ' ')
+
+        if in_bio or not self._check_if_in_body():
+            if self.getnext() is not None or self.tail:
+                return '%s\\par ' % paratext
+            else:
+                return paratext
+
         rend = self.get('rend')
         if rend == 'noindent':
             indent = '\\noindent'
@@ -415,10 +438,7 @@ class PersName(ExternalReferenceTag):
 
     def _init(self):
         super()._init()
-        self.in_body_text = True
-        note_ancestors = self.iterancestors('{*}note')
-        if any(True for _ in note_ancestors):
-            self.in_body_text = False
+        self.in_body = self._check_if_in_body()
 
     def get_replacement(self, persdict, in_body):
         ref = self.ex_ref('ref')
@@ -426,13 +446,13 @@ class PersName(ExternalReferenceTag):
             return '\\unknownperson{%s}' % self.text
 
         if not in_body:
-            self.in_body_text = False
+            self.in_body = False
 
         person = persdict[ref]
-        indexonly = person.get('indexing_only')
+        indexonly = person.get('indexonly')
         indexname = person['indexname']
-        if indexonly or not self.in_body_text:
-            if not self.in_body_text:
+        if indexonly or not self.in_body:
+            if not self.in_body:
                 indexname += '|innote'
             return '\\indexperson{%s}{%s}' % (indexname, self.text)
         else:
@@ -681,7 +701,7 @@ class UnWrapMe(TEITag):
 
     """Unwrap tags of this type"""
 
-    target = ['subst']
+    target = ['subst', 'trait']
 
     def get_replacement(self):
         return self.unwrap()

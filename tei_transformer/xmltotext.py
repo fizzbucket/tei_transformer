@@ -9,16 +9,18 @@ from .tags import TEITag
 
 class Transform():
 
-    def __init__(self, filepath, working_directory, use_persdict=True):
+    def __init__(self, paths, use_persdict=True):
 
-        self.filepath = filepath
-        self.working_directory = working_directory
+        self.filepath = paths.inputpath
+        self.working_directory = paths.workdir
 
         self.parser = Parser()
         if use_persdict:
-            self.persdict = PersDict(self.working_directory, self.parser)
+            self.persdict = PersDict(paths, self.parser)
         else:
             self.persdict = None
+
+        self.text = self.transform()
 
     def transform(self):
         tree = self.parser(self.filepath)
@@ -27,6 +29,9 @@ class Transform():
         assert body is not None
         tree = self.parser.transform_tree(body, self.persdict)
         return '\n'.join(tree.itertext()).strip()
+
+    def __str__(self):
+        return self.text
 
 class PersDict(collections.UserDict):
 
@@ -43,9 +48,9 @@ class PersDict(collections.UserDict):
     for how this should be formatted.
     """
 
-    def __init__(self, working_directory, parser, filename="personlist.xml"):
-        self.picklepath = os.path.join(working_directory, 'personlist.pickle')
-        self.path = os.path.join(working_directory, filename)
+    def __init__(self, paths, parser):
+        self.picklepath = paths.picklepath
+        self.path = paths.personlist
         self.parser = parser
         self._get_persdict()
 
@@ -77,15 +82,15 @@ class PersDict(collections.UserDict):
     def _from_pickle(self):
         """Load persdict from pickle"""
         try:
-            with open(self.picklepath, 'rb') as p:
+            with open(str(self.picklepath), 'rb') as p:
                 return pickle.load(p)
         except (EOFError, FileNotFoundError) as e:
             if e == EOFError: # i.e. something went wrong with pickling
-                os.unlink(self.picklepath)
+                self.picklepath.unlink()
 
     def _to_pickle(self):
         """Dump persdict to pickle"""
-        with open(self.picklepath, 'wb') as p:
+        with open(str(self.picklepath), 'wb') as p:
             pickle.dump(self.data, p)
 
 
@@ -153,11 +158,10 @@ class PersonMaker(collections.UserDict):
         trait = self.tag.find('{*}trait')
         if trait is None:
             return ''
-        traitpara = trait.find('{*}p')
-        if traitpara is not None:
-            if traitpara.getchildren() or traitpara.text:
-                self.parser.transform_tree(traitpara, persdict, in_body=False)
-                return traitpara.text.strip()
+
+        self.parser.transform_tree(trait, persdict, in_body=False)
+        if trait.text:
+            return trait.text.strip()
         return ''
 
     @staticmethod
@@ -189,6 +193,9 @@ class Parser():
 
     def __call__(self, textpath):
         """Parse textpath and return it"""
+        return self._parse(str(textpath))
+
+    def _parse(self, textpath):
         try:
             tree = etree.parse(textpath, self.parser)
         except FileNotFoundError:
@@ -198,6 +205,7 @@ class Parser():
             print('An error occurred parsing {textpath}:\n\'{err}\''.format(textpath=textpath, err=err))
             sys.exit(1)
         return tree
+
 
 
     def parser_options(self):
@@ -220,8 +228,6 @@ class Parser():
             yield from self._tag_classes(cls=subcls)
             if hasattr(subcls, 'target') and subcls.target:
                 yield subcls
-
-
 
     def transform_tree(self, tree, persdict, in_body=True):
         """Transform a tree"""
