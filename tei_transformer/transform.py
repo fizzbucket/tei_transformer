@@ -4,7 +4,8 @@ import re
 import textwrap
 import collections
 
-from .xmltotext import Transform
+from . import persdict
+from . import parser
 from .pathsmanager import PathManager
 
 def transform_tei(inputname, outname=None, force=False, quiet=False):
@@ -16,6 +17,36 @@ def transform_tei(inputname, outname=None, force=False, quiet=False):
 
 class ConversionError(Exception):
     pass
+
+class Transform():
+
+    def __init__(self, paths, use_persdict=True):
+
+        self.filepath = paths.inputpath
+        self.working_directory = paths.workdir
+        self.paths = paths
+        self.use_persdict = use_persdict
+
+        self.parser = parser.Parser()
+        self.persdict = self._persdict()
+
+        self.text = self.transform()
+
+    def _persdict(self):
+        if self.use_persdict:
+            return persdict.PersDict(self.paths, self.parser)
+
+    def transform(self):
+        tree = self.parser(self.filepath)
+        root = tree.getroot()
+        body = root.find('.//{*}body') # {*} is to map any namespace
+        assert body is not None
+        tree = self.parser.transform_tree(body, self.persdict)
+        return '\n'.join(tree.itertext()).strip()
+
+    def __str__(self):
+        return self.text
+
 
 
 class LatexifiedText(collections.UserString):

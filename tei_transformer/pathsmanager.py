@@ -1,11 +1,7 @@
-import pathlib
 import filecmp
 import os
 import textwrap
-import sys
 import shutil
-import hashlib
-
 
 class Path():
 
@@ -120,7 +116,7 @@ class DefaultPath(FilePath):
 
     def __init__(self, path):
         super().__init__(path)
-        self._sub_text = None
+        self._sub_text = ''
 
     def read(self, flag='r'):
         if self.check():
@@ -159,17 +155,14 @@ class ResourcePath(FilePath):
     def __init__(self, resource_path, work_path, required=True):
         super().__init__(work_path)
         self.required = required
-        self.not_copied = True
         if self.required:
             self.resource_path = RequiredPath(resource_path)
         else:
             self.resource_path = DefaultPath(resource_path)
 
     def _copy_resource(self):
-        if not self.check():
-            self.not_copied = self.resource_path.copy_to(self)
-        elif not self.resource_path.file_compare(self):
-            self.not_copied = self.resource_path.copy_to(self)
+        if not self.check() or not self.resource_path.file_compare(self):
+            self.resource_path.copy_to(self)
 
 class ResourcePathMaker():
 
@@ -258,11 +251,6 @@ class PathManager():
         self.out_pdf = FilePath(op)
 
     def _make_workdirpaths(self):
-
-        wpck = self.workdir.extend(self.personlist.stem() + '.pickle')
-        self.picklepath = FilePath(wpck)
-        if not self.personlist.not_copied:
-            self.picklepath.unlink()
         wt = self.workdir.extend(self._basename + '.tex')
         self.working_tex = FilePath(wt)
         wp = self.workdir.extend(self._basename + '.pdf')
@@ -274,9 +262,9 @@ class PathManager():
         self.references = rmkr('references.bib')
         self.personlist = rmkr('personlist.xml')
         # Optional ones
-        self.introduction = rmkr('introduction.tex',
+        self.introduction = rmkr('no_introduction.tex',
                                     required=False)
-        self.appendices = rmkr('appendices.tex',
+        self.appendices = rmkr('no_appendices.tex',
                                     required=False)
         self.indexstyle = rmkr(self._basename + '.mst',
                                     required=False,

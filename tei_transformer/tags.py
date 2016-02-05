@@ -280,8 +280,23 @@ class TextualNote(TEITag):
         marker = self.get_marker()
         if marker is False or self.get('type') != 'annotation':
             self.raise_()
+
+
+        abbreviation = self.get('ln')
+        if abbreviation:
+            return self.abbreviated_lemma(marker, abbreviation)
+        return self.unabbreviated_lemma(marker)
+
+    def abbreviated_lemma(self, marker, abbreviation):
+        marker.replace_w_str('\\annotationlem{')
+        abbreviation = self._process_text_contents(abbreviation)
+        return '}{%s}{%s}' % (abbreviation, self.text)
+
+    def unabbreviated_lemma(self, marker):
         marker.replace_w_str('\\annotation{')
         return '}{%s}' % self.text
+
+
 
     def empty(self):
         return self.text is None and len(self.getchildren()) == 0
@@ -365,14 +380,12 @@ class VerseLineGroup(TEITag):
 class VerseLine(TEITag):
     target = 'l'
 
-    def _init(self):
-        super()._init()
+    def get_replacement(self):
         if self.tail:
             self.tail = self.tail.strip()
         if self.text:
             self.text = self.text.strip()
 
-    def get_replacement(self):
         return '%s &\n' % self.text
 
 
@@ -600,7 +613,7 @@ class TextualVariant(FilterTag):
                 rdgs.append(tag)
 
         rdgs = map(self.rdgs_map, rdgs)
-        return '\\variants{%s}{%s}' % (lem_text, ' '.join(rdgs))
+        return ' \\variants{%s}{%s}' % (lem_text, ' '.join(rdgs))
 
     @staticmethod
     def rdgs_map(rdg):
