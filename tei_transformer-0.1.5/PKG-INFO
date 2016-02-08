@@ -1,0 +1,16 @@
+Metadata-Version: 1.1
+Name: tei_transformer
+Version: 0.1.5
+Summary: Transform a TEI-encoded critical edition into a print-ready file.
+Home-page: https://github.com/thomasowenmclean/tei_transformer
+Author: Tom McLean
+Author-email: thomasowenmclean@gmail.com
+License: GPL
+Description: UNKNOWN
+Keywords: TEI critical edition xml transform scholarly diplomatic latex xml
+Platform: UNKNOWN
+Classifier: Development Status :: 4 - Beta
+Classifier: Topic :: Text Processing :: Markup :: LaTeX
+Classifier: Topic :: Text Processing :: Markup :: XML
+Classifier: License :: OSI Approved :: GNU General Public License v2 (GPLv2)
+Classifier: Programming Language :: Python :: 3
