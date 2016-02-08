@@ -49,8 +49,11 @@ class PathManager():
 
             w = self.extend_workdir(name)
 
-            if not w.exists() or not r.read_md5() == w.read_md5():
+            if not w.exists():
                 if r.exists():
+                    r.copy2(w)
+            elif r.exists():
+                if not r.read_md5() == w.read_md5():
                     r.copy2(w)
             return w
 
