@@ -36,8 +36,6 @@ class Parser():
             sys.exit(1)
         return tree
 
-
-
     def parser_options(self):
         """Options for lxml parser"""
         return {'ns_clean': True,

@@ -15,8 +15,8 @@ class PersDict(collections.UserDict):
     for how this should be formatted.
     """
 
-    def __init__(self, paths, parser):
-        self.path = paths.personlist
+    def __init__(self, path, parser):
+        self.path = path
         self.parser = parser
         self._get_persdict()
 
@@ -30,17 +30,16 @@ class PersDict(collections.UserDict):
         people = [PersonMaker(person, self.parser) for person in people]
 
         for person in people:
-            xml_id, person_dict = person.first_run()
-            self.data[xml_id] = person_dict
+            xml_id, person_struct = person.first_run()
+            self.data[xml_id] = person_struct
 
         for person in people:
-            person.second_run(self.data)
-        
+            self.data[person.xml_id] = person.second_run(self.data)
 
-class PersonMaker(collections.UserDict):
+
+class PersonMaker():
 
     def __init__(self, tag, parser):
-        super().__init__()
         self.tag = tag
         self.xml_id = self._xml_id()
         firstnames, surnames = self._get_names()
@@ -48,14 +47,17 @@ class PersonMaker(collections.UserDict):
         self.reversed_surnames = ' '.join(reversed(surnames))
         self.surnames = ' '.join(surnames)
         self.parser = parser
+        self.perstuple = collections.namedtuple(self.xml_id, ['indexname', 'indexonly', 'description'])
 
     def first_run(self):
-        self.data['indexname'] = self._indexname()
-        return self.xml_id, self.data
+        self.indexname = self._indexname()
+        return self.xml_id, self.perstuple(self.indexname, None, None)
 
     def second_run(self, persdict):
-        self.data['indexonly'] = self._indexonly()
-        self.data['description'] = self._get_description(persdict)
+        indexonly = self._indexonly()
+        description = self._get_description(persdict)
+        assert description is not None or description == '' and not description == 'None'
+        return self.perstuple(self.indexname, indexonly, description)
 
     def _indexname(self):
         return ', '.join([self.reversed_surnames, self.firstnames])

@@ -3,6 +3,7 @@ import subprocess
 import re
 import textwrap
 import collections
+import sys
 
 from . import persdict
 from . import parser
@@ -11,20 +12,16 @@ from .pathsmanager import PathManager
 def transform_tei(inputname, outname=None, force=False, quiet=False):
 
     paths = PathManager(inputname, outputname=outname)
-    bare_text = Transform(paths)
-    latex = LatexifiedText(bare_text, paths)
-    pdf = PDFMaker(latex, paths, force, quiet)
-
-class ConversionError(Exception):
-    pass
+    bare_text = Transform(paths.paths.inputpath, paths.paths.personlist)
+    latex = LatexifiedText(bare_text, paths.text)
+    pdf = PDFMaker(str(latex), paths.latex, force, quiet)
 
 class Transform():
 
-    def __init__(self, paths, use_persdict=True):
+    def __init__(self, inputpath, personlistpath, use_persdict=True):
 
-        self.filepath = paths.inputpath
-        self.working_directory = paths.workdir
-        self.paths = paths
+        self.personlist = personlistpath
+        self.filepath = inputpath
         self.use_persdict = use_persdict
 
         self.parser = parser.Parser()
@@ -34,7 +31,7 @@ class Transform():
 
     def _persdict(self):
         if self.use_persdict:
-            return persdict.PersDict(self.paths, self.parser)
+            return persdict.PersDict(self.personlist, self.parser)
 
     def transform(self):
         tree = self.parser(self.filepath)
@@ -51,9 +48,9 @@ class Transform():
 
 class LatexifiedText(collections.UserString):
 
-    def __init__(self, text, paths):
+    def __init__(self, text, tex_components):
         super().__init__(text)
-        self.paths = paths
+        self.tex_components = tex_components
         self.before_latexify()
         self.latexify()
         self.after_latexify()
@@ -66,32 +63,15 @@ class LatexifiedText(collections.UserString):
         self.data = '\n'.join(self._document_parts())
 
     def _document_parts(self):
-        for part in [self._preamble,
-                    self._after_preamble,
-                    self._after_text_start,
-                    self._get_base_text,
-                    self._after_text_end]:
+        for part in [self.tex_components.preamble,
+                    self.tex_components.after_preamble,
+                    self.tex_components.after_text_start,
+                    self.text,
+                    self.tex_components.after_text_end]:
             yield part()
 
-    def _get_base_text(self):
+    def text(self):
         return self.data
-
-    def _preamble(self):
-        """Return string to form the preamble of the latex document"""
-        return self.paths.preamble.read()
-    
-    def _after_preamble(self):
-        return self.paths.after_preamble.read()
-
-    def _after_text_start(self):
-        """Return string to include after '\\begin{document}' but before text"""
-        intro_stem = self.paths.introduction.stem
-        return self.paths.after_text_start.read()
-
-    def _after_text_end(self):
-        """Return string to include after text. Should end with '\\end{document}"""
-        appendices_stem = self.paths.appendices.stem
-        return self.paths.after_text_end.read()
 
     def after_latexify(self):
         """Actions to take after text is latexified."""
@@ -106,7 +86,8 @@ class LatexifiedText(collections.UserString):
                 (r'\n\n+', '\n\n'),
                ]
         for match in wspaces:
-          self.data = re.sub(*match, self.data)
+            m, r = match
+            self.data = re.sub(m, r, self.data)
 
 
     def _hyphenation_fixes(self):
@@ -123,46 +104,36 @@ class LatexifiedText(collections.UserString):
 class PDFMaker():
 
     def __init__(self, latex, paths, force, quiet):
-        self.latex = latex
-        self.force = force
         self.paths = paths
         self.quiet = quiet
 
-        self.worktex = self.paths.working_tex
-        self.workpdf = self.paths.working_pdf
-
-        if self.check_run():
+        if self.paths.check_run(latex, force):
             self.make_pdf()
         self.on_pdf_creation()
 
-    def check_run(self):
-        no_pdf = not self.workpdf.exists()
-        no_tex = not self.worktex.exists()
-
-        if self.force or no_pdf or no_tex:
-            return True
-        elif not self.worktex.hash_compare(self.latex):
-            return True
-        else:
-            print('Has not changed since the last run')
+    class ConversionError(Exception):
+        pass
 
     def on_pdf_creation(self):
-        self.workpdf.copy_to(self.paths.out_pdf)
+        self.paths.copy()
 
     def make_pdf(self):
-        self.worktex.write(str(self.latex))
         self.call_latex()
-        if not self.workpdf.exists():
-            raise ConversionError('No PDF file was produced.')
+        if not self.paths.working_pdf.exists():
+            raise self.ConversionError('No PDF file was produced.')
 
     def call_latex(self):
         options = ['-bibtex', # run biber for references
            '-cd', # change to working_directory to run
-           '-f', # force through errors
+           #'-f', # force through errors
            '-g', # run even if unchanged.
            '-pdf',]
-        latexmk_command = ['latexmk'] + options + [str(self.worktex)]
-        if self.quiet:
-            with open(os.devnull, "w") as fnull:
-                return subprocess.call(latexmk_command, stdout = fnull, stderr = fnull)
-        return subprocess.call(latexmk_command)
+        latexmk_command = ['latexmk'] + options + [str(self.paths.working_tex)]
+        try:
+            if self.quiet:
+                with open(os.devnull, "w") as fnull:
+                    return subprocess.call(latexmk_command, stdout = fnull, stderr = fnull)
+            return subprocess.call(latexmk_command)
+        except FileNotFoundError: # no latexmk
+            print('You need to install latexmk and pdflatex.')
+            sys.exit()

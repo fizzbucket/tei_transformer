@@ -1,289 +1,219 @@
-import filecmp
-import os
 import textwrap
-import shutil
+import os
 
-class Path():
-
-    def __init__(self, p):
-        self._path = str(p)
-
-    def __str__(self):
-        return self._path
-
-    def stem(self):
-        name = self.basename()
-        i = name.rfind('.')
-        if 0 < i < len(name) - 1:
-            return name[:i]
-        else:
-            return name
-
-    def basename(self):
-        return os.path.basename(self._path)
-
-    def dirname(self):
-        return os.path.dirname(self._path)
-
-    def read(self, flag='r'):
-        with open(self._path, flag) as i:
-            return i.read()
-
-    def write(self, text, flag='w'):
-        with open(self._path, flag) as o:
-            o.write(text)
-
-    def exists(self):
-        return os.path.exists(self._path)
-
-    def is_file(self):
-        return os.path.isfile(self._path)
-
-    def is_dir(self):
-        return os.path.isdir(self._path)
-
-    def hash_compare(self, text):
-        one = hash(self.read())
-        two = hash(text)
-        return one == two
-        
-    def file_compare(self, path):
-        return filecmp.cmp(self._path, str(path))
-
-    def copy_to(self, path):
-        print('Copying %s to %s' % (self._path, str(path)))
-        return shutil.copy2(self._path, str(path))
-
-
-class FilePath(Path):
-
-    def __init__(self, path):
-        super().__init__(path)
-
-    def add(self, addendum):
-        raise NotADirectoryError(self._path)
-
-    def check(self):
-        return self.exists() and self.is_file()
-
-    def unlink(self):
-        return os.unlink(self._path)
-
-    def rmdir(self):
-        raise NotADirectoryError(self_path)
-
-
-class DirPath(Path):
-
-    def __init__(self, path):
-        super().__init__(path)
-        try:
-            self.mkdir()
-        except FileExistsError:
-            pass
-
-    def extend(self, addendum):
-        return os.path.join(self._path, str(addendum))
-
-    def check(self):
-        return self.exists() and self.is_dir()
-
-    def mkdir(self):
-        if not self.check():
-            os.mkdir(self._path)
-        else:
-            raise FileExistsError(self._path)
-
-    def unlink(self):
-        raise IsADirectoryError(self._path)
-
-
-class RequiredPath(FilePath):
-
-    def __init__(self, path):
-        super().__init__(path)
-        self.check()
-
-    def check(self):
-        if not super().check():
-            raise IOError(self._path)
-
-class DefaultPath(FilePath):
-    """ A subclass of FilePath with a change; if the file does not exist,
-    attempts to read or copy it are intercepted and whatever returned by 
-    _substitute(self) are used instead. This allows the replacement of a
-    missing file in a way invisible to the caller."""
-
-    def __init__(self, path):
-        super().__init__(path)
-        self._sub_text = ''
-
-    def read(self, flag='r'):
-        if self.check():
-            return super().read(flag=flag)
-        sub = self._substitute()
-        return sub
-
-    def copy_to(self, destination):
-        if self.check():
-            return super().copy_to(str(destination))
-        sub = self._substitute()
-        if isinstance(destination, Path):
-            destination.write(sub)
-        else:
-            with open(destination, 'w') as o:
-                o.write(sub)
-
-    def _substitute(self):
-        return self._sub_text
-
-    def hash_compare(self, other):
-        if not self.check():
-            return False
-        return super().hash_compare(other)
-
-    def file_compare(self, other):
-        if not self.check():
-            return False
-        return super().file_compare(other)
-
-
-class ResourcePath(FilePath):
-
-    """Path representing a resource."""
-
-    def __init__(self, resource_path, work_path, required=True):
-        super().__init__(work_path)
-        self.required = required
-        if self.required:
-            self.resource_path = RequiredPath(resource_path)
-        else:
-            self.resource_path = DefaultPath(resource_path)
-
-    def _copy_resource(self):
-        if not self.check() or not self.resource_path.file_compare(self):
-            self.resource_path.copy_to(self)
-
-class ResourcePathMaker():
-
-    def __init__(self, paths):
-        self.paths = paths
-        self._sub_dict = {'indexstyle': self._indexstyle_sub,
-                'beforetext': self._beforetext_sub,
-                'aftertextend': self._after_text_sub,
-                'afterpreamble': self._after_preamble_sub}
-
-    @property
-    def intro_stem(self):
-        return self.paths.introduction.stem() or ''
-
-    @property
-    def append_stem(self):
-        return self.paths.appendices.stem() or ''
-    
-    def __call__(self, name, required=True, key=None):
-        work_path = self.paths.workdir.extend(name)
-        resource_path = self.paths.resourcedir.extend(name)
-        made = ResourcePath(resource_path, work_path, required=required)
-        if not required and key:
-            made.resource_path._sub_text = self._sub_dict[key]()
-        made._copy_resource()
-        return made
-
-    def _set_sub_text(self, key):
-        self._sub_text = self._sub_dict[key]()
-        
-    def _indexstyle_sub(self):
-        return textwrap.dedent("""\
-            headings_flag 1
-            heading_prefix "{\\\\bfseries "
-            heading_suffix "}\\\\nopagebreak\\n"
-            """)
-
-    def _beforetext_sub(self):
-        return textwrap.dedent("""\
-            \\frontmatter
-            \\tableofcontents%s
-            \\mainmatter
-            \\beginnumbering
-            """ % self.include_stem(self.intro_stem))
-
-    def _after_text_sub(self):
-        return textwrap.dedent("""\
-            \\endnumbering
-            \\backmatter%s
-            \\printbibliography
-            \\printindex
-            \\end{document}
-            """ % self.include_stem(self.append_stem))
-
-    def _after_preamble_sub(self):
-        return '\\begin{document}'
-
-    @staticmethod
-    def include_stem(stem):
-        if stem:
-            return '\n\\include{%s}' % stem
-        return stem
-
+from path import Path
 
 class PathManager():
 
     def __init__(self, inputname, outputname=None):
+        basepaths = self.BasePaths(inputname)
+        self.paths = self.FilePathsManager(basepaths)
+        self.text = self.FilesReader(basepaths)
+        self.latex = self.LatexTransformRequires(basepaths, outputname)
 
-        self._make_curdirpaths(inputname, outputname)
-        self._make_resourcepaths()
-        self._make_workdirpaths()
+    class BasePaths():
 
-    def _make_curdirpaths(self, inputname, outputname):
+        def __init__(self, inputname):
+            self._inputpath = Path(inputname)
+            self._basename = self._inputpath.namebase
+            self._curdir = Path(self._inputpath.dirname() or os.curdir)
+            self._workdir = self.extend_curdir('working_directory')
+            if not self._workdir.exists():
+                self._workdir.mkdir()
+            self._resourcedir = self.extend_curdir('resources')
+            if not self._resourcedir.exists():
+                raise IOError('You need to provide a folder of resources.')
+            self._personlist = None
+
+        def _extend_path(self, original, extension):
+            extended = original.joinpath(extension)
+            return Path(extended)
+
+        def extend_curdir(self, extension):
+            return self._extend_path(self._curdir, extension)
+
+        def extend_workdir(self, extension):
+            return self._extend_path(self._workdir, extension)
+
+        def extend_resourcedir(self, extension):
+            return self._extend_path(self._resourcedir, extension)
+
+        def _resource_path(self, name, required=False):
+            r = self.extend_resourcedir(name)
+            if not r.exists():
+                if required:
+                    raise FileNotFoundError(r)
+                else:
+                    print('Resource not found: %s' % name)
+                    print('Will try to use substitute...')
+
+            w = self.extend_workdir(name)
+
+            if not w.exists() or not r.read_md5() == w.read_md5():
+                if r.exists():
+                    r.copy2(w)
+            return w
+
+    class FilePathsManager():
+
+        def __init__(self, basepaths):
+            self.bp = basepaths
+            self._personlist = None
         
-        self.inputpath = FilePath(inputname)
-        self._basename = self.inputpath.stem()
+        @property
+        def inputpath(self):
+            return self.bp._inputpath
 
-        curdir = DirPath(self.inputpath.dirname() or os.curdir)
-        wd = curdir.extend('working_directory')
-        self.workdir = DirPath(wd)
-        rd = curdir.extend('resources')
-        self.resourcedir = DirPath(rd)
+        @property
+        def personlist(self):
+            if not self._personlist:
+                self._personlist = self.bp._resource_path('personlist.xml')
+            return self._personlist
 
-        outpdfname = outputname or self._basename + '.pdf'
-        op = curdir.extend(outpdfname)
-        self.out_pdf = FilePath(op)
+    class FilesReader():
 
-    def _make_workdirpaths(self):
-        wt = self.workdir.extend(self._basename + '.tex')
-        self.working_tex = FilePath(wt)
-        wp = self.workdir.extend(self._basename + '.pdf')
-        self.working_pdf = FilePath(wp)
+        def __init__(self, basepaths):
+            self.bp = basepaths
+            self._make_hidden()
 
-    def _make_resourcepaths(self):
-        rmkr = ResourcePathMaker(self)
-        self.preamble = rmkr('latex_preamble.tex')
-        self.references = rmkr('references.bib')
-        self.personlist = rmkr('personlist.xml')
-        # Optional ones
-        self.introduction = rmkr('no_introduction.tex',
-                                    required=False)
-        self.appendices = rmkr('no_appendices.tex',
-                                    required=False)
-        self.indexstyle = rmkr(self._basename + '.mst',
-                                    required=False,
-                                    key='indexstyle')
-        self.after_preamble = rmkr('after_preamble.tex',
-                                    required=False,
-                                    key='afterpreamble')
-        self.after_text_start = rmkr('after_text_start.tex',
-                                    required=False,
-                                    key='beforetext')
-        self.after_text_end = rmkr('after_text_end.tex',
-                                    required=False,
-                                    key='aftertextend')
+        def rp(self, name, r=False):
+            return self.bp._resource_path(name, required=r)
 
-    @staticmethod
-    def is_required_resource(path):
-        return True
+        # Hidden requirements
 
-    @staticmethod
-    def is_optional_resource(path):
-        return True
-        
+        def _make_hidden(self):
+            self.references()
+            self.indexstyle()
+
+        def references(self):
+            return self.rp('references.bib', r=True)
+
+        def indexstyle(self):
+            p = self.bp.extend_workdir(self.bp._basename + '.mst')
+            if not p.exists():
+                r = textwrap.dedent("""\
+                headings_flag 1
+                heading_prefix "{\\\\bfseries "
+                heading_suffix "}\\\\nopagebreak\\n"
+                """)
+                p.write_text(r)
+
+        # Mandatory
+
+        def preamble(self):
+            preamble = self.rp('latex_preamble.tex', r=True)
+            return preamble.text()
+
+        # Optional
+
+        def _handle_optional(self, name, subst=''):
+            target = self.rp(name)
+            if target.exists():
+                return target.text()
+            return subst
+
+        def after_preamble(self):
+            n = 'after_preamble.tex'
+            r = '\\begin{document}'
+            return self._handle_optional(n, r)
+
+        def after_text_end(self):
+            n = 'after_text_end.tex'
+            r = textwrap.dedent("""\
+            \\endnumbering
+            \\backmatter
+            %s
+            \\printbibliography
+            \\printindex
+            \\end{document}
+            """ % self.appendices_include())
+            return self._handle_optional(n, r)
+
+        def intro_include(self):
+            if self.introduction():
+                return '\\include{%s}' % self.introduction().namebase
+            return '%'
+
+        def appendices_include(self):
+            if self.appendices():
+                return '\\include{%s}' % self.appendices().namebase
+            return '%'
+
+
+        def after_text_start(self):
+            n = 'after_text_start.tex'
+            r = textwrap.dedent("""\
+            \\frontmatter
+            \\tableofcontents
+            %s
+            \\mainmatter
+            \\beginnumbering
+            """ % self.intro_include())
+            return self._handle_optional(n, r)
+
+        def introduction(self):
+            n = 'introduction.tex'
+            r = self.rp(n)
+            if r.exists():
+                return r
+
+        def appendices(self):
+            n = 'appendices.tex'
+            r = self.rp(n)
+            if r.exists():
+                return r
+
+    class LatexTransformRequires():
+
+        def __init__(self, basepaths, outputname):
+            self.ew = basepaths.extend_workdir
+            self._basename = basepaths._basename
+            self._outputname = outputname
+
+            self._working_tex = None
+            self._working_pdf = None
+            self._out_pdf = None
+
+        @property
+        def working_tex(self):
+            if not self._working_tex:
+                self._working_tex = self.ew(self._basename + '.tex')
+            return self._working_tex
+
+        @property
+        def working_pdf(self):
+            if not self._working_pdf:
+                self._working_pdf = self.ew(self._basename + '.pdf')
+            return self._working_pdf
+
+        @property
+        def out_pdf(self):
+            if not self._out_pdf:
+                outname = self._outputname or self._basename + '.pdf'
+                self._out_pdf = outname
+            return self._out_pdf
+
+        def check_run(self, latex, force):
+            """Whether it is necessary to write tex and call latexmk"""
+            if force:
+                self.working_tex.write_text(latex)
+                return True
+
+            no_pdf = not self.working_pdf.exists()
+            no_tex = not self.working_tex.exists()
+
+            if no_pdf or no_tex:
+                self.working_tex.write_text(latex)
+                return True
+
+            compare = hash(self.working_tex.text()) == hash(latex)
+            if not compare:
+                self.working_tex.write_text(latex)
+                return True
+
+            print('Unchanged since last run')
+            return False
+
+        def copy(self):
+            """Copy working pdf to final destination"""
+            self.working_pdf.copy(self.out_pdf)

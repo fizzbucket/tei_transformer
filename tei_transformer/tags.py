@@ -462,14 +462,14 @@ class PersName(ExternalReferenceTag):
             self.in_body = False
 
         person = persdict[ref]
-        indexonly = person.get('indexonly')
-        indexname = person['indexname']
+        indexonly = person.indexonly is True
+        indexname = person.indexname
         if indexonly or not self.in_body:
             if not self.in_body:
                 indexname += '|innote'
             return '\\indexperson{%s}{%s}' % (indexname, self.text)
         else:
-            description = person.get('description')
+            description = person.description
             return '\\person{%s}{%s}{%s}{%s}' % (ref, indexname, description, self.text)
 
 
