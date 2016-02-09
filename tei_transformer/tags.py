@@ -1,6 +1,5 @@
 from lxml import etree
 import calendar
-import sys
 
 from latexfixer.fix import LatexText
 
@@ -17,6 +16,7 @@ XML_NAMESPACE = '{http://www.w3.org/XML/1998/namespace}'
 
 class ImplementationError(Exception):
     pass
+
 
 class FmtMethods():
 
@@ -78,6 +78,7 @@ class FmtMethods():
                 (self._smcps(), self.smallcaps),
                 (self._none(), self.handle_none)]
 
+
 class TEITag(etree.ElementBase):
 
     def _init(self):
@@ -97,15 +98,18 @@ class TEITag(etree.ElementBase):
     def __str__(self):
         return etree.tounicode(self, with_tail=False)
 
-
     @property
     def descendants_count(self):
         if not self._descendants_count:
             if self.no_children():
                 self._descendants_count = 0
             else:
-                self._descendants_count = sum(1 for _ in self.iterdescendants())
+                self._descendants_count = sum(self._descs())
         return self._descendants_count
+
+    def _descs(self):
+        for __ in self.iterdescendants():
+            yield 1
 
     @property
     def localname(self):
@@ -126,7 +130,7 @@ class TEITag(etree.ElementBase):
         else:
             replacement = self.get_replacement()
         # We don't want to catch an empty string,
-        if replacement is None: # So we need the more specific test.
+        if replacement is None:  # So we need the more specific test.
             return  # i.e. don't touch this.
         else:
             self.replace_w_str(replacement)
@@ -195,23 +199,20 @@ class TEITag(etree.ElementBase):
             return False
         return True
 
-
     @staticmethod
     def textjoin(a, b):
         """Join a and b, replacing either with an empty string
         if their value is not True"""
         return ''.join([(a or ''), (b or '')])
 
-
-
 # STANDARD
+
 
 class Head(TEITag):
 
     target = 'head'
 
     def get_replacement(self):
-
         """ Return the replacement for a tag of type <head>"""
 
         # Make explicit the desire not to indent following paragraph.
@@ -219,7 +220,8 @@ class Head(TEITag):
             next_sibling = self.getnext()
             if next_sibling is not None and next_sibling.localname == 'p':
                 if next_sibling.get('rend') is None:
-                    next_sibling.text = '\\noindent %s' % (next_sibling.text or '')
+                    t = next_sibling.text or ''
+                    next_sibling.text = '\\noindent %s' % t
 
         parent_attrs = self.getparent().attrib
         div_type = parent_attrs['type']
@@ -281,7 +283,6 @@ class TextualNote(TEITag):
         if marker is False or self.get('type') != 'annotation':
             self.raise_()
 
-
         abbreviation = self.get('ln')
         if abbreviation:
             return self.abbreviated_lemma(marker, abbreviation)
@@ -295,8 +296,6 @@ class TextualNote(TEITag):
     def unabbreviated_lemma(self, marker):
         marker.replace_w_str('\\annotation{')
         return '}{%s}' % self.text
-
-
 
     def empty(self):
         return self.text is None and len(self.getchildren()) == 0
@@ -411,8 +410,9 @@ class FloatingText(TEITag):
             return '\\pstart %s\\pend' % self.text
         self.raise_()
 
+
 class ExternalReferenceTag(TEITag):
-    
+
     def ex_ref(self, key):
         key = self.required_key(key)
         return key[1:]
@@ -470,7 +470,8 @@ class PersName(ExternalReferenceTag):
             return '\\indexperson{%s}{%s}' % (indexname, self.text)
         else:
             description = person.description
-            return '\\person{%s}{%s}{%s}{%s}' % (ref, indexname, description, self.text)
+            dt = (ref, indexname, description, self.text)
+            return '\\person{%s}{%s}{%s}{%s}' % dt
 
 
 class Label(TEITag):
@@ -479,7 +480,6 @@ class Label(TEITag):
     def get_replacement(self):
         n = self.required_key('n')
         return '\\label{%s}' % n
-
 
 
 class Space(TEITag):
@@ -494,6 +494,7 @@ class Space(TEITag):
         else:
             return '\\qquad{}'
         self.raise_()
+
 
 class Div(TEITag):
     target = 'div'
@@ -519,8 +520,6 @@ class Div(TEITag):
         for parent in self.iterancestors('{*}div'):
             if parent.get('type') == 'year':
                 return parent.required_key('n')
-
-
 
 
 class PageBreak(TEITag):
@@ -624,7 +623,6 @@ class TextualVariant(FilterTag):
         return '\\wit{%s}{%s}' % (rdg.text, wit)
 
 # FURTHER SUBCLASSING.
-
 
 
 class SoCalled(TEITag, FmtMethods):

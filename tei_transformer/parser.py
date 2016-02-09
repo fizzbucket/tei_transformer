@@ -2,6 +2,7 @@ from lxml import etree
 from .tags import TEITag
 import sys
 
+
 class Parser():
 
     """Parser and configuration options"""
@@ -12,6 +13,9 @@ class Parser():
         self.parser.set_element_class_lookup(lookup)
         namespace = lookup.get_namespace('http://www.tei-c.org/ns/1.0')
         # We set TEITag as the default class for the parser.
+        self._target_mapping(namespace)
+
+    def _target_mapping(self, namespace):
         namespace[None] = self.base_tag_class()
         # Map the target to handling class in the lxml parser.
         for cls in self.tag_classes():
@@ -32,15 +36,16 @@ class Parser():
             print('Could not find %s.' % textpath)
             sys.exit(1)
         except etree.XMLSyntaxError as err:
-            print('An error occurred parsing {textpath}:\n\'{err}\''.format(textpath=textpath, err=err))
+            print('An error occurred parsing {textpath}:\n\'{err}\''
+                  .format(textpath=textpath, err=err))
             sys.exit(1)
         return tree
 
     def parser_options(self):
         """Options for lxml parser"""
         return {'ns_clean': True,
-                'remove_comments':True,
-                'remove_blank_text':True}
+                'remove_comments': True,
+                'remove_blank_text': True}
 
     def tag_classes(self):
         """Return classes to handle tags.
@@ -70,4 +75,4 @@ class Parser():
                     tag.process(persdict)
             else:
                 tag.process()
-        return tree 
+        return tree

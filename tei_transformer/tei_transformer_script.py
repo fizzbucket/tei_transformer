@@ -1,8 +1,9 @@
 import argparse
-from tei_transformer import transform
+from tei_transformer.transform import transform_tei
+import sys
 
 
-def get_args():
+def get_args(args):
     parser = argparse.ArgumentParser(
         description="Transform a TEI-encoded critical edition into a pdf.")
     parser.add_argument("-t", "--transform",
@@ -20,19 +21,21 @@ def get_args():
     parser.add_argument('-s', '--standalone',
                         help="Do not include introduction or appendices",
                         action="store_true")
-    return parser.parse_args()
+    return parser.parse_args(args)
 
-
-def main():
-    args = get_args()
+def interpret_args(args):
     if args.transform:
-        transform.transform_tei(
+        transform_tei(
             args.transform,
             outname=args.outputname,
             force=args.force,
             quiet=args.quiet,
             standalone=args.standalone
             )
+
+def main():
+    args = get_args(sys.argv[1:])
+    interpret_args(args)
 
 if __name__ == '__main__':
     main()

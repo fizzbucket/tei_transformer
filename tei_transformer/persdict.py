@@ -1,17 +1,23 @@
 import collections
 
+
 class PersDict(collections.UserDict):
 
     """Create a persdict option used for identifying people in the text.
-    Has keys made up of unique identifiers; these return a dictionary containing three values:
-    1) 'indexname': the name used in indexing a person.
+    Has keys made up of unique identifiers;
+    these return a dictionary containing three values:
+    1) 'indexname':
+        the name used in indexing a person.
         This is a string [surnames], [firstnames].
-    2) 'description': a description of a person suitable for use in a lemma note.
+    2) 'description':
+        a description of a person suitable for use in a lemma note.
         This is a string [firstnames][surnames]([birth]-[death])[description]
-    3) 'indexonly': a toggle for whether such a description should be used.
+    3) 'indexonly':
+        a toggle for whether such a description should be used.
 
     We get this by parsing a file called, by default, 'personlist.xml'.
-    This file should be made up of an xml-formatted list of people; see PersonInterpreter
+    This file should be made up of an xml-formatted list of people;
+    see PersonInterpreter
     for how this should be formatted.
     """
 
@@ -47,7 +53,8 @@ class PersonMaker():
         self.reversed_surnames = ' '.join(reversed(surnames))
         self.surnames = ' '.join(surnames)
         self.parser = parser
-        self.perstuple = collections.namedtuple(self.xml_id, ['indexname', 'indexonly', 'description'])
+        nt_list = ['indexname', 'indexonly', 'description']
+        self.perstuple = collections.namedtuple(self.xml_id, nt_list)
 
     def first_run(self):
         self.indexname = self._indexname()
@@ -56,7 +63,9 @@ class PersonMaker():
     def second_run(self, persdict):
         indexonly = self._indexonly()
         description = self._get_description(persdict)
-        assert description is not None or description == '' and not description == 'None'
+        empty = description == ''
+        not_none = description is not None and not description == 'None'
+        assert not_none or empty
         return self.perstuple(self.indexname, indexonly, description)
 
     def _indexname(self):
@@ -77,7 +86,7 @@ class PersonMaker():
         return firstnames, surnames
 
     def _indexonly(self):
-        if self.tag.find('{*}indexonly') is not None: # Non-TEI addition
+        if self.tag.find('{*}indexonly') is not None:  # Non-TEI addition
             return True
         else:
             return self.tag.get('indexonly') in ['true', 'True']
@@ -111,8 +120,8 @@ class PersonMaker():
 
     @staticmethod
     def _find_string(parent, searchterm):
-        """Return a string containing the text for each tag searchterm matches."""
+        """Return a string containing the text
+        for each tag searchterm matches."""
         searchstring = '{*}' + searchterm
         matches = parent.findall(searchstring)
         return [str((name.text or '').strip()) for name in matches]
-
