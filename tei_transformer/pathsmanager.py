@@ -51,11 +51,14 @@ DEFAULT_INDEX_STYLE = textwrap.dedent("""\
 class PathManager():
 
     def __init__(self, inputpath, outputname=None, standalone=False):
-        self.basename = Path(outputname or inputpath).namebase
         self.inputpath = Path(inputpath)
-        curdir = Path(inputpath.dirname() or os.curdir)
+        self.outputname = outputname
+        self.basename = self.inputpath.namebase
+        curdir = Path(self.inputpath.dirname() or os.curdir)
         self.extend_curdir(curdir)
         self.standalone = standalone
+
+        self.hidden_requirements()
 
     # Only the following three functions will be called.
 
@@ -73,9 +76,9 @@ class PathManager():
 
     def workfiles(self):
         """Paths for calling latexmk with"""
-        out_pdf = self.basename + '.pdf'
         working_tex = self._ewb('.tex')
         working_pdf = self._ewb('.pdf')
+        out_pdf = self.outputname or (self.basename + '.pdf')
         return working_tex, working_pdf, out_pdf
 
     def hidden_requirements(self):
@@ -119,6 +122,8 @@ class PathManager():
         else:
             if not r.read_md5() == w.read_md5():
                 r.copy2(w)
+        if required:
+            assert w.exists()
         return w
 
     # Hidden requirements
@@ -148,7 +153,7 @@ class PathManager():
             yield part()
 
     def _parts_after_text(self):
-        parts = [self.after_text_end]
+        parts = [self._after_text_end]
         for part in parts:
             yield part()
 

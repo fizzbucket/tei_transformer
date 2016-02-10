@@ -64,10 +64,10 @@ class LatexifiedText(collections.UserString):
         """Actions to take before text is latexified"""
         pass
 
-    def latexify(self):
-        components = [self.before_text,
+    def latexify(self, before_text, after_text):
+        components = [before_text,
                       self.data,
-                      self.after_text]
+                      after_text]
         self.data = '\n'.join(components)
 
     def after_latexify(self):
@@ -101,9 +101,10 @@ class LatexifiedText(collections.UserString):
 
 class PDFMaker():
 
-    def __init__(self, latex, working_pdf, working_tex, out_pdf, force, quiet):
+    def __init__(self, latex, working_tex, working_pdf, out_pdf, force, quiet):
         self.working_tex = working_tex
         self.working_pdf = working_pdf
+        self.out_pdf = out_pdf
         self.quiet = quiet
 
         if self.check_run(latex, force):
@@ -148,7 +149,7 @@ class PDFMaker():
     def check_run(self, latex, force):
         """Whether it is necessary to write tex and call latexmk"""
 
-        if self._force_check() or self._compare_check():
+        if self._force_check(force) or self._compare_check():
             return self._write(latex)
 
         print('Unchanged since last run')
@@ -165,5 +166,5 @@ class PDFMaker():
         return hash(self.working_tex.text()) != hash(latex)
 
     def _write(self, latex):
-        self.working_tex.write(latex)
+        self.working_tex.write_text(latex)
         return True
