@@ -149,7 +149,7 @@ class PDFMaker():
     def check_run(self, latex, force):
         """Whether it is necessary to write tex and call latexmk"""
 
-        if self._force_check(force) or self._compare_check():
+        if self._force_check(force) or self._compare_check(latex):
             return self._write(latex)
 
         print('Unchanged since last run')

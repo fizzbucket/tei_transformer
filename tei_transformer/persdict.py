@@ -22,18 +22,16 @@ class PersDict(collections.UserDict):
     """
 
     def __init__(self, path, parser):
-        self.path = path
-        self.parser = parser
-        self._get_persdict()
+        self._get_persdict(path, parser)
 
-    def _get_persdict(self):
+    def _get_persdict(self, path, parser):
         super().__init__()
-        self._make_persdict()
+        self._make_persdict(path, parser)
 
-    def _make_persdict(self):
+    def _make_persdict(self, path, parser):
         """Make persdict from path"""
-        people = self.parser(self.path).getroot().iter('{*}person')
-        people = [PersonMaker(person, self.parser) for person in people]
+        people = parser(path).getroot().iter('{*}person')
+        people = [PersonMaker(person, parser) for person in people]
 
         for person in people:
             xml_id, person_struct = person.first_run()
@@ -44,6 +42,8 @@ class PersDict(collections.UserDict):
 
 
 class PersonMaker():
+
+    """Read xml representing a person"""
 
     def __init__(self, tag, parser):
         self.tag = tag

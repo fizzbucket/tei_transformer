@@ -23,6 +23,7 @@ def get_args(args):
                         action="store_true")
     return parser.parse_args(args)
 
+
 def interpret_args(args):
     if args.transform:
         transform_tei(
@@ -32,6 +33,7 @@ def interpret_args(args):
             quiet=args.quiet,
             standalone=args.standalone
             )
+
 
 def main():
     args = get_args(sys.argv[1:])
