@@ -1,5 +1,6 @@
 import textwrap
 import os
+from functools import partial
 
 from path import Path
 
@@ -21,240 +22,164 @@ APPENDICES_NAME = 'appendices.tex'
 AFTER_TEXT_END_NAME = 'after_text_end.tex'
 AFTER_TEXT_START_NAME = 'after_text_start.tex'
 
+# Substitutions when not present
 
-class PathManager():
-
-    def __init__(self, inputname, outputname=None, standalone=False):
-        basepaths = BasePaths(inputname)
-        self.paths = FilePathsManager(basepaths)
-        self.text = FilesReader(basepaths, standalone)
-        self.latex = LatexTransformRequires(basepaths, outputname)
-
-
-class BasePaths():
-
-    def __init__(self, inputname):
-        self._from_inputname()
-        self._workdir = self._i_workdir()
-        self._resourcedir = self._i_resourcedir()
-        self._personlist = None
-
-    def _from_inputname(self, inputname):
-        self._inputpath = Path(inputname)
-        self._basename = self._inputpath.namebase
-        self._curdir = Path(self._inputpath.dirname() or os.curdir)
-
-    def _i_workdir(self):
-        self._workdir = self.extend_curdir(WORKDIR_NAME)
-        if not self._workdir.exists():
-            self._workdir.mkdir()
-
-    def _i_resourcedir(self):
-        self._resourcedir = self.extend_curdir(RESOURCEDIR_NAME)
-        if not self._resourcedir.exists():
-            raise IOError('You need to provide a folder of resources.')
-
-    def _extend_path(self, original, extension):
-        extended = original.joinpath(extension)
-        return Path(extended)
-
-    def extend_curdir(self, extension):
-        return self._extend_path(self._curdir, extension)
-
-    def extend_workdir(self, extension):
-        return self._extend_path(self._workdir, extension)
-
-    def extend_resourcedir(self, extension):
-        return self._extend_path(self._resourcedir, extension)
-
-    def _resource_path(self, name, required=False):
-        r = self.extend_resourcedir(name)
-        w = self.extend_workdir(name)
-
-        if not r.exists() and required:
-            raise FileNotFoundError(r)
-
-        if not w.exists():
-            self._resource_path_no_working(r, w)
-        else:
-            self._resource_path_working_exists(r, w)
-
-        return w
-
-    def _resource_path_no_working(self, resourcepath, workpath):
-        if resourcepath.exists():
-                resourcepath.copy2(workpath)
-
-    def _resource_path_working_exists(self, r, w):
-        if not r.read_md5() == w.read_md5():
-            r.copy2(w)
-
-
-class FilePathsManager():
-
-    def __init__(self, basepaths):
-        self.bp = basepaths
-        self._personlist = None
-
-    @property
-    def inputpath(self):
-        return self.bp._inputpath
-
-    @property
-    def personlist(self):
-        if not self._personlist:
-            self._personlist = self.bp._resource_path(PERSONLIST_NAME)
-        return self._personlist
-
-
-class FilesReader():
-
-    def __init__(self, basepaths, standalone):
-        self.bp = basepaths
-        self._make_hidden()
-        self.standalone = standalone
-
-    def rp(self, name, r=False):
-        return self.bp._resource_path(name, required=r)
-
-    # Hidden requirements
-
-    def _make_hidden(self):
-        self.references()
-        self.indexstyle()
-
-    def references(self):
-        return self.rp(REFERENCES_NAME, r=True)
-
-    def indexstyle(self):
-        p = self.bp.extend_workdir(self.bp._basename + '.mst')
-        if not p.exists():
-            r = textwrap.dedent("""\
-            headings_flag 1
-            heading_prefix "{\\\\bfseries "
-            heading_suffix "}\\\\nopagebreak\\n"
-            """)
-            p.write_text(r)
-
-    # Mandatory
-
-    def preamble(self):
-        preamble = self.rp('latex_preamble.tex', r=True)
-        return preamble.text()
-
-    # Optional
-
-    def _handle_optional(self, name, subst=''):
-        target = self.rp(name)
-        if target.exists():
-            return target.text()
-        return subst
-
-    def after_preamble(self):
-        n = AFTER_PREAMBLE_NAME
-        r = '\\begin{document}'
-        return self._handle_optional(n, r)
-
-    def after_text_end(self):
-        n = AFTER_TEXT_END_NAME
-        r = textwrap.dedent("""\
+AFTER_PREAMBLE_SUBST = '\\begin{document}'
+AFTER_TEXT_END_SUBST = textwrap.dedent("""\
         \\endnumbering
         \\backmatter
         %s
         \\printbibliography
         \\printindex
         \\end{document}
-        """ % self.appendices_include())
-        return self._handle_optional(n, r)
-
-    def intro_include(self):
-        if self.introduction():
-            return '\\include{%s}' % self.introduction().namebase
-        return '%'
-
-    def appendices_include(self):
-        if self.appendices():
-            return '\\include{%s}' % self.appendices().namebase
-        return '%'
-
-    def after_text_start(self):
-        n = AFTER_TEXT_START_NAME
-        r = textwrap.dedent("""\
+        """)
+AFTER_TEXT_START_SUBST = textwrap.dedent("""\
         \\frontmatter
         \\tableofcontents
         %s
         \\mainmatter
         \\beginnumbering
-        """ % self.intro_include())
+        """)
+
+DEFAULT_INDEX_STYLE = textwrap.dedent("""\
+        headings_flag 1
+        heading_prefix "{\\\\bfseries "
+        heading_suffix "}\\\\nopagebreak\\n"
+        """)
+
+
+class PathManager():
+
+    def __init__(self, inputpath, outputname=None, standalone=False):
+        self.basename = Path(outputname or inputpath).namebase
+        self.inputpath = Path(inputpath)
+        curdir = Path(inputpath.dirname() or os.curdir)
+        self.extend_curdir(curdir)
+        self.standalone = standalone
+
+    # Only the following three functions will be called.
+
+    def inputpaths(self):
+        """Paths needed for parsing"""
+        inputpath = self.inputpath
+        personlistpath = self._resource_path(PERSONLIST_NAME, required=True)
+        return inputpath, personlistpath
+
+    def textwraps(self):
+        """Strings for wrapping parsed text to make a .tex file"""
+        before_text = self.before_text()
+        after_text = self.after_text()
+        return before_text, after_text
+
+    def workfiles(self):
+        """Paths for calling latexmk with"""
+        out_pdf = self.basename + '.pdf'
+        working_tex = self._ewb('.tex')
+        working_pdf = self._ewb('.pdf')
+        return working_tex, working_pdf, out_pdf
+
+    def hidden_requirements(self):
+        """We don't use these but latex might"""
+        self._references()
+        self._indexstyle()
+
+    # Administrative bits
+
+    def extend_curdir(self, curdir):
+        ec = partial(self.extend_dir, curdir)
+        self.workdir(ec)
+        self.resourcedir(ec)
+
+    def workdir(self, extend_curdir):
+        workdir = extend_curdir(WORKDIR_NAME)
+        if not workdir.exists():
+            workdir.mkdir()
+        self._extend_workdir = partial(self.extend_dir, workdir)
+        self._ewb = lambda x: self._extend_workdir(self.basename + x)
+
+    def resourcedir(self, extend_curdir):
+        resourcedir = extend_curdir(RESOURCEDIR_NAME)
+        if not resourcedir.exists():
+            raise IOError('You need to provide a folder of resources.')
+        self._extend_resourcedir = partial(self.extend_dir, resourcedir)
+
+    def extend_dir(self, original, extension):
+        extended = original.joinpath(extension)
+        return Path(extended)
+
+    def _resource_path(self, name, required=False):
+        """Make a resource path"""
+        r = self._extend_resourcedir(name)
+        w = self._extend_workdir(name)
+        if not r.exists() and required:
+            raise FileNotFoundError(r)
+        if not w.exists():
+            if r.exists():
+                    r.copy2(w)
+        else:
+            if not r.read_md5() == w.read_md5():
+                r.copy2(w)
+        return w
+
+    # Hidden requirements
+
+    def _references(self):
+        return self._resource_path(REFERENCES_NAME, required=True)
+
+    def _indexstyle(self):
+        p = self._ewb('.mst')
+        if not p.exists():
+            r = DEFAULT_INDEX_STYLE
+            p.write_text(r)
+
+    # Making the textwrap bits
+
+    def before_text(self):
+        return '\n'.join(self._parts_before_text())
+
+    def after_text(self):
+        return '\n'.join(self._parts_after_text())
+
+    def _parts_before_text(self):
+        parts = [self._preamble,
+                 self._after_preamble,
+                 self._after_text_start]
+        for part in parts:
+            yield part()
+
+    def _parts_after_text(self):
+        parts = [self.after_text_end]
+        for part in parts:
+            yield part()
+
+    def _preamble(self):
+        preamble = self._resource_path(PREAMBLE_NAME, required=True)
+        return preamble.text()
+
+    def _handle_optional(self, name, subst=''):
+        target = self._resource_path(name)
+        try:
+            return target.text()
+        except IOError:
+            return subst
+
+    def _after_preamble(self):
+        n = AFTER_PREAMBLE_NAME
+        r = AFTER_PREAMBLE_SUBST
         return self._handle_optional(n, r)
 
-    def introduction(self):
-        if self.standalone:
-            return None
-        n = INTRODUCTION_NAME
-        r = self.rp(n)
-        if r.exists():
-            return r
+    def _after_text_end(self):
+        n = AFTER_TEXT_END_NAME
+        r = AFTER_TEXT_END_SUBST % self._include(APPENDICES_NAME)
+        return self._handle_optional(n, r)
 
-    def appendices(self):
-        if self.standalone:
-            return None
-        n = APPENDICES_NAME
-        r = self.rp(n)
-        if r.exists():
-            return r
+    def _after_text_start(self):
+        n = AFTER_TEXT_START_NAME
+        r = AFTER_TEXT_START_SUBST % self._include(INTRODUCTION_NAME)
+        return self._handle_optional(n, r)
 
-
-class LatexTransformRequires():
-
-    def __init__(self, basepaths, outputname):
-        self.ew = basepaths.extend_workdir
-        self._basename = basepaths._basename
-        self._outputname = outputname
-
-        self._working_tex = None
-        self._working_pdf = None
-        self._out_pdf = None
-
-    @property
-    def working_tex(self):
-        if not self._working_tex:
-            self._working_tex = self.ew(self._basename + '.tex')
-        return self._working_tex
-
-    @property
-    def working_pdf(self):
-        if not self._working_pdf:
-            self._working_pdf = self.ew(self._basename + '.pdf')
-        return self._working_pdf
-
-    @property
-    def out_pdf(self):
-        if not self._out_pdf:
-            outname = self._outputname or self._basename + '.pdf'
-            self._out_pdf = outname
-        return self._out_pdf
-
-    def check_run(self, latex, force):
-        """Whether it is necessary to write tex and call latexmk"""
-
-        no_pdf = not self.working_pdf.exists()
-        no_tex = not self.working_tex.exists()
-
-        if force or no_pdf or no_tex:
-            return self._write(latex)
-
-        compare = hash(self.working_tex.text()) == hash(latex)
-        if not compare:
-            return self._write(latex)
-
-        print('Unchanged since last run')
-        return False
-
-    def _write(self, latex):
-        self.working_tex.write(latex)
-        return True
-
-    def copy(self):
-        """Copy working pdf to final destination"""
-        self.working_pdf.copy(self.out_pdf)
+    def _include(self, name):
+        r = self._resource_path(name)
+        if self.standalone or not r.exists():
+            return '%'
+        return '\\include{%s}' % r.namebase

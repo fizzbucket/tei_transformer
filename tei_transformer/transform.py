@@ -13,9 +13,14 @@ def transform_tei(inputname, outname=None,
                   force=False, quiet=False, standalone=False):
     """"Read inputname and transform to a pdf"""
     paths = PathManager(inputname, outputname=outname, standalone=standalone)
-    bare_text = Transform(paths.paths.inputpath, paths.paths.personlist)
-    latex = LatexifiedText(bare_text, paths.text)
-    PDFMaker(str(latex), paths.latex, force, quiet)
+
+    inputpaths = paths.inputpaths()
+    textwraps = paths.textwraps()
+    workfiles = paths.workfiles()
+
+    bare_text = Transform(*inputpaths)
+    latex = LatexifiedText(bare_text, *textwraps)
+    PDFMaker(str(latex), *workfiles, force, quiet)
 
 
 class Transform():
@@ -49,11 +54,10 @@ class Transform():
 
 class LatexifiedText(collections.UserString):
 
-    def __init__(self, text, tex_components):
+    def __init__(self, text, before_text, after_text):
         super().__init__(text)
-        self.tex_components = tex_components
         self.before_latexify()
-        self.latexify()
+        self.latexify(before_text, after_text)
         self.after_latexify()
 
     def before_latexify(self):
@@ -61,20 +65,10 @@ class LatexifiedText(collections.UserString):
         pass
 
     def latexify(self):
-        self.data = '\n'.join(self._document_parts())
-
-    def _document_parts(self):
-        tc = self.working_tex
-        parts = [tc.preamble,
-                 tc.after_preamble,
-                 tc.after_text_start,
-                 self.text,
-                 tc.after_text_end]
-        for part in parts:
-            yield part()
-
-    def text(self):
-        return self.data
+        components = [self.before_text,
+                      self.data,
+                      self.after_text]
+        self.data = '\n'.join(components)
 
     def after_latexify(self):
         """Actions to take after text is latexified."""
@@ -107,11 +101,12 @@ class LatexifiedText(collections.UserString):
 
 class PDFMaker():
 
-    def __init__(self, latex, paths, force, quiet):
-        self.paths = paths
+    def __init__(self, latex, working_pdf, working_tex, out_pdf, force, quiet):
+        self.working_tex = working_tex
+        self.working_pdf = working_pdf
         self.quiet = quiet
 
-        if self.paths.check_run(latex, force):
+        if self.check_run(latex, force):
             self.make_pdf()
         self.on_pdf_creation()
 
@@ -119,11 +114,11 @@ class PDFMaker():
         pass
 
     def on_pdf_creation(self):
-        self.paths.copy()
+        self.copy()
 
     def make_pdf(self):
         self.call_latex()
-        if not self.paths.working_pdf.exists():
+        if not self.working_pdf.exists():
             raise self.ConversionError('No PDF file was produced.')
 
     def call_latex(self):
@@ -131,16 +126,44 @@ class PDFMaker():
                    '-cd',  # change to working_directory to run
                    '-g',  # run even if unchanged.
                    '-pdf']
-        latexmk_command = ['latexmk'] + options + [str(self.paths.working_tex)]
+        latexmk_command = ['latexmk'] + options + [str(self.working_tex)]
         try:
-            self.latexmk(latexmk_command)
+            self._call(latexmk_command, self.quiet)
         except FileNotFoundError:  # no latexmk
             print('You need to install latexmk and pdflatex.')
             sys.exit()
 
-    def latexmk(self, command):
-        if self.quiet:
+    @staticmethod
+    def _call(command, quiet):
+        if quiet:
             with open(os.devnull, "w") as fnull:
                 quiet_stdout = {'stdout': fnull, 'stderr': fnull}
                 return subprocess.call(command, **quiet_stdout)
         return subprocess.call(command)
+
+    def copy(self):
+        """Copy working pdf to final destination"""
+        self.working_pdf.copy(self.out_pdf)
+
+    def check_run(self, latex, force):
+        """Whether it is necessary to write tex and call latexmk"""
+
+        if self._force_check() or self._compare_check():
+            return self._write(latex)
+
+        print('Unchanged since last run')
+        return False
+
+    def _force_check(self, force):
+        no_pdf = not self.working_pdf.exists()
+        no_tex = not self.working_tex.exists()
+
+        if force or no_pdf or no_tex:
+            return True
+
+    def _compare_check(self, latex):
+        return hash(self.working_tex.text()) != hash(latex)
+
+    def _write(self, latex):
+        self.working_tex.write(latex)
+        return True
