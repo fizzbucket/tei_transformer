@@ -5,7 +5,7 @@ import collections
 import sys
 
 from . import persdict
-from . import parser
+from .parser import Parser, transform_tree
 from .pathsmanager import PathManager
 
 
@@ -31,21 +31,20 @@ class Transform():
         self.filepath = inputpath
         self.use_persdict = use_persdict
 
-        self.parser = parser.Parser()
         self.persdict = self._persdict()
 
         self.text = self.transform()
 
     def _persdict(self):
         if self.use_persdict:
-            return persdict.PersDict(self.personlist, self.parser)
+            return persdict.persdict(self.personlist)
 
     def transform(self):
-        tree = self.parser(self.filepath)
+        tree = Parser(self.filepath)
         root = tree.getroot()
         body = root.find('.//{*}body')  # {*} is to map any namespace
         assert body is not None
-        tree = self.parser.transform_tree(body, self.persdict)
+        tree = transform_tree(body, self.persdict)
         return '\n'.join(tree.itertext()).strip()
 
     def __str__(self):

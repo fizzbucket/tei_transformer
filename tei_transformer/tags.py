@@ -78,16 +78,18 @@ class FmtMethods():
                 (self._smcps(), self.smallcaps),
                 (self._none(), self.handle_none)]
 
-
 class TEITag(etree.ElementBase):
 
     def _init(self):
         self._localname = None
+        self.transform_text()
+        self._descendants_count = None
+
+    def transform_text(self):
         if self.text:
             self.text = self._process_text_contents(self.text)
         if self.tail:
             self.tail = self._process_text_contents(self.tail)
-        self._descendants_count = None
 
     def __eq__(self, other):
         return self.descendants_count == other.descendants_count

@@ -2,8 +2,7 @@ from lxml import etree
 from .tags import TEITag
 import sys
 
-
-class Parser():
+class _Parser():
 
     """Parser and configuration options"""
 
@@ -62,17 +61,20 @@ class Parser():
             if hasattr(subcls, 'target') and subcls.target:
                 yield subcls
 
-    def transform_tree(self, tree, persdict, in_body=True):
-        """Transform a tree"""
-        # Using a heap here would be slower
-        tags = list(tree.getiterator('*'))
-        tags.sort()
-        for tag in tags:
-            if tag.localname == 'persName':
-                if not in_body:
-                    tag.process(persdict, in_body=False)
-                else:
-                    tag.process(persdict)
+
+Parser = _Parser()
+
+def transform_tree(tree, persdict, in_body=True):
+    """Transform a tree"""
+    # Using a heap here would be slower
+    tags = list(tree.getiterator('*'))
+    tags.sort()
+    for tag in tags:
+        if tag.localname == 'persName':
+            if not in_body:
+                tag.process(persdict, in_body=False)
             else:
-                tag.process()
-        return tree
+                tag.process(persdict)
+        else:
+            tag.process()
+    return tree
