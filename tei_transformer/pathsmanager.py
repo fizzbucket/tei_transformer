@@ -21,7 +21,7 @@ class PathManager():
         return map(self.process_resource, [config['resources'][x] for x in rnamelist])
 
     def latex_only_requirements(self):
-        return self._process(['references', 'indexstyle'])
+        references, indexstyle = self._process(['references', 'indexstyle'])
 
     def parsing_paths(self):
         return self.inputpath, next(self._process(['personlist']))
