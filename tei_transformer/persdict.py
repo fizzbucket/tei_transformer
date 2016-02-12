@@ -1,5 +1,5 @@
 from functools import partial
-from .parser import Parser
+from .parser import Parser, transform_tree
 
 def persdict(path):
     people = map(Person, Parser(path).getroot().iter('{*}person'))

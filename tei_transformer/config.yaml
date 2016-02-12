@@ -1,9 +1,6 @@
 ---
 
-dirnames:
-  workdir:
-    name: working_directory
-    make: true
+workdir: working_directory
 
 resources:
 
@@ -69,7 +66,7 @@ resources:
     output: path
 
 
-caller_command: latexmk -g -pdf -bibtex
+caller_command: latexmk -g -cd -pdf -bibtex
 
 string_replacements:
   - ['Horowhenua', 'Horo\-whenua']

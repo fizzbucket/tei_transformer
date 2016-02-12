@@ -30,7 +30,6 @@ def interpret_args(args):
             args.transform,
             outname=args.outputname,
             force=args.force,
-            quiet=args.quiet,
             standalone=args.standalone
             )
 

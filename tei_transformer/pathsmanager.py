@@ -28,7 +28,7 @@ class PathManager():
 
     def textwraps(self):
         before_text = ['preamble', 'after_preamble', 'after_text_start']
-        after_text = processor(['after_text_end'])
+        after_text = ['after_text_end']
         return map('\n'.join, map(self._process, [before_text, after_text]))
 
     def latexmk_paths(self):
@@ -37,9 +37,10 @@ class PathManager():
 
     def _dirs(self):
         curdir = self.inputpath.dirname() or os.curdir
-        config.update_config(curdir)
-        resourcedir = self._extend_dir(curdir, 'resources', required=True)
-        workdir = self._extend_dir(curdir, config['workdir']['name'], make=True) 
+        update_config(curdir)
+        curdir = Path(curdir)
+        resource_dir = self._extend_dir(curdir, 'resources', required=True)
+        work_dir = self._extend_dir(curdir, config['workdir'], make=True) 
         self.extend_resourcedir = partial(self._extend_dir, resource_dir)
         self.extend_workdir = partial(self._extend_dir, work_dir)
         self.extend_workdir_b = lambda ext: self.extend_workdir(self.basename + ext)
@@ -62,17 +63,17 @@ class PathManager():
         if not r.exists() and required:
             raise FileNotFoundError(r)
         try:
-            text = resource.read_text()
+            text = r.text()
         except FileNotFoundError as e:
             if subst in [None, False]:
                 raise e
-            text = self.process_subst(resource)
-        if output == 'read':
+            text = self.process_subst(resource, subst)
+        if resource.get('output') == 'read':
             return text
         w.write_text(text)
         return w
 
-    def process_subst(self, resource):
+    def process_subst(self, resource, subst):
         sub_include = resource.get('sub_include')
         if sub_include and not self.standalone:
             _sub = {'name': sub_include['name'], 'subst': sub_include.get('subst') or ''}

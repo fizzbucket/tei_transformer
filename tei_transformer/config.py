@@ -7,8 +7,7 @@ with open(os.path.join(os.path.dirname(__file__), "config.yaml"), "r") as f:
 
 def update_config(curdir):
 
-	rdir = config.dirnames.resourcedir['name']
-	custom_settings = os.path.join(curdir, rdir, 'config.yaml')
+	custom_settings = os.path.join(curdir, 'resources', 'config.yaml')
 	try:
 		with open(custom_settings) as f:
 			custom_settings = yaml.load(f)
