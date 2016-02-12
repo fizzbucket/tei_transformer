@@ -1,1 +1,0 @@
-recursive-include tei_transformer/examples *.tex *.xml *.bib

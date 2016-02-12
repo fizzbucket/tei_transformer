@@ -1,0 +1,86 @@
+---
+
+dirnames:
+  workdir:
+    name: working_directory
+    make: true
+
+resources:
+
+  personlist:
+    name: personlist.xml
+    required: true
+    output: path
+
+  references:
+    name: references.bib
+    required: true
+
+  preamble:
+    name: latex_preamble.tex
+    required: true
+    output: read
+
+  after_preamble:
+    name: after_preamble.tex
+    required: false
+    output: read
+    subst: \begin{document}
+
+  after_text_start:
+    name: after_text_start.tex
+    required: false
+    output: read
+    subst: |
+        \frontmatter
+        \tableofcontents
+        %s
+        \mainmatter
+        \beginnumbering
+    sub_include:
+      name: introduction.tex
+      subst: ''
+      required: false
+
+  after_text_end:
+    name: after_text_end.tex
+    required: false
+    output: read
+    subst: |
+          \endnumbering
+          \backmatter
+          %s
+          \printbibliography
+          \printindex
+          \end{document}
+    sub_include:
+      name: appendices.tex
+      subst: ''
+      required: false
+
+  indexstyle:
+    name: false
+    ext: .mst
+    required: false
+    subst: |
+        headings_flag 1
+        heading_prefix "{\\bfseries "
+        heading_suffix "}\\nopagebreak\n"
+    output: path
+
+
+caller_command: latexmk -g -pdf -bibtex
+
+string_replacements:
+  - ['Horowhenua', 'Horo\-whenua']
+  - ['Trémouille', 'Tré\-mouille']
+  - ['HQ. C.O.', 'HQ.~C.O.']
+  - ['C.O. Battalion', 'C.O.~Battalion']
+
+regex_replacements:
+  - ['\ +', ' ']
+  - ['\n\ +', '\n']
+  - ['\n\n+', '\n\n']
+  - ['([A-Z.]{2,})\.\ (?=[A-Z])', r'\1\@. ']
+
+...

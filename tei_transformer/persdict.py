@@ -1,5 +1,12 @@
 from functools import partial
-from .parser import Parser, transform_tree
+from .parser import Parser
+
+def persdict(path):
+    people = map(Person, Parser(path).getroot().iter('{*}person'))
+    persdict = {person.xml_id: person for person in people}
+    for person in persdict.values():
+        person.update(persdict)
+    return persdict
 
 
 class Person():
@@ -57,11 +64,3 @@ class Person():
         in each tag searchterm matches."""
         matches = (cls._stripstring(m) for m in parent.iter('{*}' + query))
         return ' '.join(matches)
-
-
-def persdict(path):
-    people = Parser(path).getroot().iter('{*}person')
-    persdict = {person.xml_id: person for person in map(Person, people)}
-    for person in persdict.values():
-        person.update(persdict)
-    return persdict

@@ -1,3 +1,4 @@
 lxml,
 latexfixer,
-path.py
+path.py,
+PyYAML

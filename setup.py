@@ -16,6 +16,7 @@ setup(
 
     # Include additional files into the package
     include_package_data=True,
+    package_data = {'tei_transformer': ['config.yaml']},
 
     entry_points={
     	'console_scripts': [
@@ -56,6 +57,7 @@ setup(
     install_requires=[
         "lxml",
         "latexfixer",
-        "path.py"
+        "path.py",
+        "PyYAML"
     ],
 )
