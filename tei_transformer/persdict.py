@@ -36,7 +36,7 @@ class Person():
         firstnames, addnames, surnames = map(finder, targets)
         addnames = "`%s'" % addnames if addnames else ''
         all_names = [' '.join([firstnames, addnames]), surnames]
-        return ', '.join(reversed(all_names)), ' '.join(all_names)
+        return ', '.join(reversed(all_names)).strip(), ' '.join(all_names).strip()
 
     @classmethod
     def _dates(cls, tag):

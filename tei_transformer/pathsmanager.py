@@ -77,7 +77,7 @@ class PathManager():
         sub_include = resource.get('sub_include')
         if sub_include and not self.standalone:
             _sub = {'name': sub_include['name'], 'subst': sub_include.get('subst') or ''}
-            sub_include = self.make_resource_path(_sub)
+            sub_include = self.process_resource(_sub)
             i = sub_include.namebase if sub_include else '%'
             include = '\\include{%s}' % i
             return subst % include
