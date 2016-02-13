@@ -20,7 +20,7 @@ setup(
 
     entry_points={
     	'console_scripts': [
-    	'tei_transformer=tei_transformer.tei_transformer_script:main',
+    	'tei_transformer=tei_transformer.transform:main',
     	]
     },
 

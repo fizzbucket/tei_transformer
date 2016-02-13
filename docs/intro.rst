@@ -8,17 +8,19 @@ ___________
 
 ::
 
-	tei_transformer --new-project
-	tei_transformer --transform example.xml
+	tei_transformer example.xml
 
-``new-project`` creates a directory in the current one named ``working_directory`` containing ancillary resources. It is expected that there will be a file called ``personlist.xml`` containing a list (in TEI-format) of people mentioned in the text, a BibLaTex file of references for citations called ``references.bib``, and an introduction in LaTeX format named ``introduction.tex``. Once those are filled out, calling with the ``transform`` argument creates a pdf.
+This is pretty simple. The one proviso is that the script expects a folder called ``resources`` in the same directory as example.xml. This needs to contain a file called ``personlist.xml`` containing a list (in TEI-format) of people mentioned in the text and a BibLaTex file of references for citations called ``references.bib``.
 
-Of course, it's also possible to skip all of this; and fit it into you own chain of events; simply getting a .tex file is as simple as::
+There's also plenty of optional files you can include for things like introductions. You can change things like the filenames of these by providing a file ``config.yaml'' in resources.
+
+Of course, it's also possible to skip all of this; and fit it into your own chain of events; simply getting a .tex file is as simple as::
 	
-	from tei_transformer.XMLProcessingWrapper import xml_to_tex
+	from tei_transformer.transform import ParserMethods
 
 	xmlpath = 'example.xml'
-	tex = xml_to_tex(xmlpath)
+	tree = ParserMethods.parse(xmlpath)
+	transformed_tree = ParserMethods.transform_tree(tree)
 
 
 However, your project's assumptions and requirements will almost certainly differ from the default assumptions, and it's definitely a good idea to muck about with things and see what happens. See :ref:`customisation`, or consider just downloading the very simple source and manipulating it as you choose.
@@ -37,5 +39,5 @@ Files are parsed using lxml::
 
 	pip install lxml
 
-The tex file produced needs pdflatex[http://latex-project.org/ftp.html] to produce a pdf file. The installation of tex which you use will also need the ``reledmac`` package, and ``latexmk`` is a good idea. Most installations will have these in any case.
+The tex file produced needs pdflatex[http://latex-project.org/ftp.html] to produce a pdf file. The installation of tex which you use will also need the ``reledmac`` package and the Perl script ``latexmk``. Most installations will have these in any case.
 

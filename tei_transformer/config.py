@@ -14,3 +14,4 @@ def update_config(curdir):
 		config.extend(custom_settings)
 	except FileNotFoundError:
 		pass
+	print('I updated config')

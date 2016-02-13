@@ -212,7 +212,7 @@ class TEITag(etree.ElementBase):
 
 class Head(TEITag):
 
-    target = 'head'
+    targets = ['head']
 
     def get_replacement(self):
         """ Return the replacement for a tag of type <head>"""
@@ -275,7 +275,7 @@ class Head(TEITag):
 
 class TextualNote(TEITag):
 
-    target = 'note'
+    targets = ['note']
 
     def get_replacement(self):
         if self.empty():
@@ -315,7 +315,7 @@ class TextualNote(TEITag):
 
 
 class Paragraph(TEITag):
-    target = 'p'
+    targets = ['p']
 
     def get_replacement(self):
 
@@ -365,7 +365,7 @@ class Paragraph(TEITag):
 
 
 class VerseLineGroup(TEITag):
-    target = 'lg'
+    targets = ['lg']
 
     def _init(self):
         super()._init()
@@ -379,7 +379,7 @@ class VerseLineGroup(TEITag):
 
 
 class VerseLine(TEITag):
-    target = 'l'
+    targets = ['l']
 
     def get_replacement(self):
         if self.tail:
@@ -391,7 +391,7 @@ class VerseLine(TEITag):
 
 
 class Foreign(TEITag):
-    target = 'foreign'
+    targets = ['foreign']
 
     def get_replacement(self):
         langcode = self.get('%slang' % XML_NAMESPACE)
@@ -402,7 +402,7 @@ class Foreign(TEITag):
 
 
 class FloatingText(TEITag):
-    target = 'floatingText'
+    targets = ['floatingText']
 
     def get_replacement(self):
         floattype = self.get('type')
@@ -425,7 +425,7 @@ class ExternalReferenceTag(TEITag):
 
 class Ptr(ExternalReferenceTag, FmtMethods):
 
-    target = 'ptr'
+    targets = ['ptr']
 
     def get_replacement(self):
         target = self.ex_ref('target')
@@ -449,7 +449,7 @@ class Ptr(ExternalReferenceTag, FmtMethods):
 
 
 class PersName(ExternalReferenceTag):
-    target = 'persName'
+    targets = ['persName']
 
     def _init(self):
         super()._init()
@@ -477,7 +477,7 @@ class PersName(ExternalReferenceTag):
 
 
 class Label(TEITag):
-    target = 'label'
+    targets = ['label']
 
     def get_replacement(self):
         n = self.required_key('n')
@@ -485,7 +485,7 @@ class Label(TEITag):
 
 
 class Space(TEITag):
-    target = 'space'
+    targets = ['space']
 
     def get_replacement(self):
         n = self.get('n')
@@ -499,7 +499,7 @@ class Space(TEITag):
 
 
 class Div(TEITag):
-    target = 'div'
+    targets = ['div']
 
     def get_replacement(self):
         divtype = self.get('type')
@@ -525,7 +525,7 @@ class Div(TEITag):
 
 
 class PageBreak(TEITag):
-    target = 'pb'
+    targets = ['pb']
 
     def _init(self):
         super()._init()
@@ -559,7 +559,7 @@ class PageBreak(TEITag):
 
 
 class Deletion(TEITag):
-    target = 'del'
+    targets = ['del']
 
     def get_replacement(self):
         if self.get('resp'):
@@ -571,7 +571,7 @@ class Deletion(TEITag):
 
 
 class Add(TEITag):
-    target = 'add'
+    targets = ['add']
 
     def get_replacement(self):
         return '\\addition{%s}' % self.text
@@ -590,7 +590,7 @@ class FilterTag(TEITag):
 
 
 class Choice(FilterTag):
-    target = 'choice'
+    targets = ['choice']
 
     def get_replacement(self):
         for name, tag in self.filterchildren(['sic', 'corr']):
@@ -603,7 +603,7 @@ class Choice(FilterTag):
 
 
 class TextualVariant(FilterTag):
-    target = 'app'
+    targets = ['app']
 
     def get_replacement(self):
         rdgs = []
@@ -628,14 +628,14 @@ class TextualVariant(FilterTag):
 
 
 class SoCalled(TEITag, FmtMethods):
-    target = 'soCalled'
+    targets = ['soCalled']
 
     def get_replacement(self):
         return self.single_quotes()
 
 
 class Supplied(TEITag, FmtMethods):
-    target = 'supplied'
+    targets = ['supplied']
 
     def get_replacement(self):
         return self._wrap('«', '»')
@@ -655,21 +655,21 @@ class RendTag(TEITag, FmtMethods):
 
 
 class Bibl(RendTag):
-    target = 'bibl'
+    targets = ['bibl']
 
     def get_replacement(self):
         return self._rendery()
 
 
 class Hi(RendTag):
-    target = 'hi'
+    targets = ['hi']
 
     def get_replacement(self):
         return self._rendery(required=True)
 
 
 class Quote(RendTag):
-    target = 'q'
+    targets = ['q']
 
     def handle_none(self):
         return self.single_quotes()
@@ -684,7 +684,7 @@ class DeleteMe(TEITag):
 
     """Delete tags of this type"""
 
-    target = ['lb']
+    targets = ['lb']
 
     def get_replacement(self):
         return self.delete()
@@ -694,7 +694,7 @@ class DontTouchMe(TEITag):
 
     """Take no action with tags of this type"""
 
-    target = ['corr', 'sic', 'lem', 'rdg']
+    targets = ['corr', 'sic', 'lem', 'rdg']
 
     def get_replacement(self):
         return None
@@ -704,7 +704,7 @@ class ReplaceMeWText(TEITag):
 
     """Replace tags of this type with their text"""
 
-    target = ['body', 'time', 'list', 'item', 'name']
+    targets = ['body', 'time', 'list', 'item', 'name']
 
     def get_replacement(self):
         return self.text
@@ -714,7 +714,7 @@ class UnWrapMe(TEITag):
 
     """Unwrap tags of this type"""
 
-    target = ['subst', 'trait']
+    targets = ['subst', 'trait']
 
     def get_replacement(self):
         return self.unwrap()

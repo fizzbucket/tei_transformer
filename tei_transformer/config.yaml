@@ -33,6 +33,10 @@ resources:
         \tableofcontents
         %s
         \mainmatter
+        \setcounter{tocdepth}{0}
+        \setsecheadstyle{\normalsize\bfseries}
+        \setsubsecheadstyle{\normalsize\bfseries}
+        \setsecnumdepth{none}
         \beginnumbering
     sub_include:
       name: introduction.tex
@@ -80,4 +84,8 @@ regex_replacements:
   - ['\n\n+', '\n\n']
   - ['([A-Z.]{2,})\.\ (?=[A-Z])', '\1\@. ']
 
+parser_options:
+  ns_clean: true
+  remove_comments: true
+  remove_blank_text: true
 ...
