@@ -55,9 +55,9 @@ setup(
     # long_description=open("README.txt").read(),
     # Dependent packages (distributions)
     install_requires=[
-        "lxml",
-        "latexfixer",
-        "path.py",
-        "PyYAML"
+        'latexfixer>=0.2.1',
+        'lxml>=3.5.0',
+        'path.py>=8.1.2',
+        'PyYAML>=3.11',
     ],
 )
