@@ -13,7 +13,7 @@ from path import Path
 from .config import config, update_config
 from .tags import TEITag
 
-class _Parser():
+class Parser():
 
     """An instance of etree.XMLParser using custom taghandlers.
 
@@ -50,7 +50,9 @@ class _Parser():
                     yield subcls, target
 
 
-class ParserMethods():    
+class ParserMethods():
+
+    """Methods for parsing and transforming XML."""
 
     @staticmethod
     def transform_tree(tree, persdict, in_body=True):
@@ -79,11 +81,13 @@ class ParserMethods():
         return tree
 
     @staticmethod
-    def parse(textpath, parser=_Parser()):
+    def parse(textpath, parser=Parser()):
         return etree.parse(textpath, parser)
 
 
 class Transformer(ParserMethods):
+
+    """Transform inputname, latexify the text produced, and make a pdf"""
 
     def __init__(self, inputname, outputname=None,
         force=False, standalone=False):
@@ -93,6 +97,7 @@ class Transformer(ParserMethods):
         self.make_pdf(latex, *paths.workfiles, force)
 
     def transform(self, inputpath, personlistpath):
+        """Transform :param:`inputpath` to text."""
         body = self.parse(inputpath).getroot().find('.//{*}body')
         assert body is not None
         tree = self.transform_tree(body, PersDict(personlistpath))
@@ -100,6 +105,8 @@ class Transformer(ParserMethods):
 
     @staticmethod
     def latexify(bare_text, before, after):
+        """"Wrap :param:`bare_text` with :param:`before` and :param:`after.
+        Return this text with string replacements and regex replacements applied"""
         text = '\n'.join([before, bare_text, after])
         for fix in config['string_replacements']:
             text = text.replace(*fix)
@@ -109,6 +116,7 @@ class Transformer(ParserMethods):
 
     @staticmethod
     def make_pdf(latex, working_tex, working_pdf, out_pdf, force):
+        """Make a pdf from :param:`latex`."""
         missing = not working_pdf.exists() or not working_tex.exists()
         if force or missing or hash(working_tex.text()) != hash(latex):
             working_tex.write_text(latex)

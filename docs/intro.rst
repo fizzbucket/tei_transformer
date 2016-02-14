@@ -19,9 +19,10 @@ Of course, it's also possible to skip all of this; and fit it into your own chai
 	from tei_transformer.transform import ParserMethods
 
 	xmlpath = 'example.xml'
-	tree = ParserMethods.parse(xmlpath)
+	parsed = ParserMethods.parse(xmlpath)
+	tree = parsed.getroot().find('.//{*}body')
 	transformed_tree = ParserMethods.transform_tree(tree)
-
+	text = '\n'.join(transformed_tree.itertext()).strip()
 
 However, your project's assumptions and requirements will almost certainly differ from the default assumptions, and it's definitely a good idea to muck about with things and see what happens. See :ref:`customisation`, or consider just downloading the very simple source and manipulating it as you choose.
 
