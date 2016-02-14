@@ -94,7 +94,7 @@ class Transformer(ParserMethods):
         paths = Paths(inputname, outputname, standalone)
         bare_text = self.transform(*paths.inputpaths)
         latex = self.latexify(bare_text, *paths.textwraps)
-        self.make_pdf(latex, *paths.workfiles, force)
+        self.make_pdf(latex, force, *paths.workfiles)
 
     def transform(self, inputpath, personlistpath):
         """Transform :param:`inputpath` to text."""
@@ -115,7 +115,7 @@ class Transformer(ParserMethods):
         return text
 
     @staticmethod
-    def make_pdf(latex, working_tex, working_pdf, out_pdf, force):
+    def make_pdf(latex, force, working_tex, working_pdf, out_pdf):
         """Make a pdf from :param:`latex`."""
         missing = not working_pdf.exists() or not working_tex.exists()
         if force or missing or hash(working_tex.text()) != hash(latex):

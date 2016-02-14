@@ -40,7 +40,6 @@ tei_transformer.transform module
     :undoc-members:
     :show-inheritance:
 
-
 .. autoclass:: tei_transformer.transform.Paths
     :members:
     :undoc-members:
