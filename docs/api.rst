@@ -14,29 +14,10 @@ TEITag also inherits all the methods available in lxml.etree.ElementBase:
 	:inherited-members:
 
 Transform
--------------
-.. autoclass:: tei_transformer.transform.Transformer
+-------------..
+.. automodule:: tei_transformer.transform
 	:members:
-	:inherited-members:
-
-Paths
---------
-
-.. autoclass:: tei_transformer.transform.Paths
-	:members:
-
-Persdict
----------
-
-.. autoclass:: tei_transformer.transform.PersDict
-	:members:
-	:inherited-members:
-
-Parser
--------
-
-.. autoclass:: tei_transformer.transform._Parser.
-	:members:
+	:undoc-members:
 
 
 Tag Handling Classes
