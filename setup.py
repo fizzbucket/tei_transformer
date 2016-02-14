@@ -5,7 +5,7 @@ setup(
     name="tei_transformer",
 
     # Version number (initial):
-    version="0.2.7",
+    version="0.2.8",
 
     # Application author details:
     author="Tom McLean",

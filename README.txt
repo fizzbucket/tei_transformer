@@ -4,22 +4,6 @@ tei_transformer is a Python script for transforming a TEI-encoded critical editi
 
 So what we have here is conceptually as much a framework for your own changes as something immediately usable (although it is.)
 
-# Installation
-
-pip3 install tei_transformer
-
-# Simple usage
-
-	from tei_transformer import transform
-
-	xmlpath = 'example.xml'
-	transformer = transform.TransformToPDF()
-	transformer.transform()
-	
-
-# Complete toolchain
-
-	tei_transformer --transform example.xml
 
 # Interested?
 
