@@ -1,13 +1,5 @@
-API
-===
-
-Module contents
----------------
-
-.. automodule:: tei_transformer
-    :members:
-    :undoc-members:
-    :show-inheritance:
+tei_transformer package
+=======================
 
 Submodules
 ----------
@@ -32,6 +24,15 @@ tei_transformer.transform module
 --------------------------------
 
 .. automodule:: tei_transformer.transform
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+
+Module contents
+---------------
+
+.. automodule:: tei_transformer
     :members:
     :undoc-members:
     :show-inheritance:
