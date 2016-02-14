@@ -1,7 +1,7 @@
 Introduction
 ============
 
-tei_transformer is a Python script for transforming a TEI-encoded critical edition into a pdf file. There are plenty of XSLT stylesheets to do something like this already, but using Python instead gives a secret advantage: we don't really lose out on anything, but it's unbelievably easy to customise things. We also don't have to restrict ourselves to the xml tree; it's very easy to bring in extra information or shift things about more easily. For example, a trick like adding a lemma note from an external data source for a person mentioned in the edition on their first appearance, then only indexing them on subsequent ones, is trivially easy rather than enormously complicated.
+tei_transformer is a Python script for transforming a TEI-encoded critical edition into a pdf file. There are plenty of XSLT stylesheets to do something like this already, but using Python instead gives a secret advantage: we don't really lose out on anything, but it's unbelievably easy to customise things. We also don't have to restrict ourselves to the xml tree; it's very easy to bring in extra information or shift things about more easily. For example, a trick like adding a lemma note from an external data source for a person mentioned in the edition on their first appearance, then only indexing them on subsequent ones, is trivially easy rather than enormously complicated. (And is, in fact, something we do.)
 
 Basic Usage
 ___________
