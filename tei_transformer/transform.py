@@ -111,7 +111,8 @@ class Transformer(ParserMethods):
         for fix in config['string_replacements']:
             text = text.replace(*fix)
         for fix in config['regex_replacements']:
-            text = re.sub(*fix, text)
+            match, replacement = fix
+            text = re.sub(match, replacement, text)
         return text
 
     @staticmethod
