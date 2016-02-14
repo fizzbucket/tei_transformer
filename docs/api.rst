@@ -12,13 +12,14 @@ Module contents
 Submodules
 ----------
 
-tei_transformer.config module
------------------------------
+tei_transformer.transform module
+--------------------------------
 
-.. automodule:: tei_transformer.config
+.. automodule:: tei_transformer.transform
     :members:
     :undoc-members:
     :show-inheritance:
+
 
 tei_transformer.tags module
 ---------------------------
@@ -28,10 +29,12 @@ tei_transformer.tags module
     :undoc-members:
     :show-inheritance:
 
-tei_transformer.transform module
---------------------------------
+tei_transformer.config module
+-----------------------------
 
-.. automodule:: tei_transformer.transform
+.. automodule:: tei_transformer.config
     :members:
     :undoc-members:
     :show-inheritance:
+
+
