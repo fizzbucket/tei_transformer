@@ -1,6 +1,53 @@
 ---
 
+xml_namespace: http://www.w3.org/XML/1998/namespace
+
+languages:
+  it: italian
+  de: german
+  la: latin
+  fr: french
+  gr: greek
+
+fmt_names:
+
+  emph:
+    - emph
+    - italic
+    - underscore
+    - underline
+
+  single:
+    - single
+
+  double:
+    - double
+
+  superscript:
+    - super
+    - upper
+
+  smcp:
+    - smcp
+
 workdir: working_directory
+
+resource_classifications:
+  
+  hidden:
+    - references
+    - indexstyle
+
+  parsepath:
+    - personlist
+
+  before_text:
+    - preamble
+    - after_preamble
+    - after_text_start
+
+  after_text:
+    - after_text_end
 
 resources:
 

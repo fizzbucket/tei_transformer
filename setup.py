@@ -5,7 +5,7 @@ setup(
     name="tei_transformer",
 
     # Version number (initial):
-    version="0.2.9",
+    version="0.3.1",
 
     # Application author details:
     author="Tom McLean",
@@ -59,5 +59,6 @@ setup(
         'lxml>=3.5.0',
         'path.py>=8.1.2',
         'PyYAML>=3.11',
+        'classtools>=0.1'
     ],
 )

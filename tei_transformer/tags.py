@@ -1,89 +1,22 @@
-from lxml import etree
 import calendar
+from functools import partial
 
 from latexfixer.fix import LatexText
 
-LANGUAGES = {
-    'it': 'italian',
-    'de': 'german',
-    'la': 'latin',
-    'fr': 'french',
-    'gr': 'greek',
-}
+from lxml import etree
 
-XML_NAMESPACE = '{http://www.w3.org/XML/1998/namespace}'
+from .config import config
+from .etreemethods import EtreeMethods
 
 
 class ImplementationError(Exception):
     pass
 
 
-class FmtMethods():
-
-    def _wrap(self, before, after, text=None):
-        if text is None:
-            text = self.text
-        return '%s%s%s' % (before, text, after)
-
-    def square_brackets(self, text=None):
-        return self._wrap('[', ']', text)
-
-    def single_quotes(self, text=None):
-        return self._wrap('`', "'", text)
-
-    def double_quotes(self, text=None):
-        return self._wrap("``", "''", text)
-
-    def emph(self, text=None):
-        if text is None:
-            text = self.text
-        return '\\emph{%s}' % text
-
-    def superscript(self, text=None):
-        if text is None:
-            text = self.text
-        return '\\textsuperscript{%s}' % text
-
-    def smallcaps(self, text=None):
-        if text is None:
-            text = self.text
-        return '\\textsc{%s}' % text
-
-    def handle_none(self):
-        return self.text
-
-    def _singles(self):
-        return ['single']
-
-    def _doubles(self):
-        return ['double']
-
-    def _emphs(self):
-        return ['emph', 'italic', 'underscore', 'underline']
-
-    def _supers(self):
-        return ['super', 'upper']
-
-    def _smcps(self):
-        return ['smcp']
-
-    def _none(self):
-        return [None, 'none', 'None']
-
-    def fmt_lists(self):
-        return [(self._emphs(), self.emph),
-                (self._singles(), self.single_quotes),
-                (self._doubles(), self.double_quotes),
-                (self._supers(), self.superscript),
-                (self._smcps(), self.smallcaps),
-                (self._none(), self.handle_none)]
-
-class TEITag(etree.ElementBase):
+class TEITag(etree.ElementBase, EtreeMethods):
 
     def _init(self):
-        self._localname = None
         self.transform_text()
-        self._descendants_count = None
 
     def transform_text(self):
         if self.text:
@@ -91,109 +24,39 @@ class TEITag(etree.ElementBase):
         if self.tail:
             self.tail = self._process_text_contents(self.tail)
 
-    def __eq__(self, other):
-        return self.descendants_count == other.descendants_count
-
-    def __lt__(self, other):
-        return self.descendants_count < other.descendants_count
-
-    def __str__(self):
-        return etree.tounicode(self, with_tail=False)
-
-    @property
-    def descendants_count(self):
-        if not self._descendants_count:
-            if self.no_children():
-                self._descendants_count = 0
-            else:
-                self._descendants_count = sum(self._descs())
-        return self._descendants_count
-
-    def _descs(self):
-        for __ in self.iterdescendants():
-            yield 1
-
-    @property
-    def localname(self):
-        """Tag name without namespace"""
-        if not self._localname:
-            self._localname = etree.QName(self).localname
-        return self._localname
-
     def process(self, persdict=None, in_body=True):
 
         # Check to see we won't accidentally wipe something out.
         not_good_children = self.localname not in ['choice', 'app']
-        if not self.no_children() and not_good_children:
+        if not len(self) == 0 and not_good_children:
             self.raise_()
         # Now on with the replacement.
         if self.localname == 'persName':
-            replacement = self.get_replacement(persdict, in_body)
-        else:
+            self.persdict = persdict
+            self.in_body = in_body and self.in_body
+
+        try:
             replacement = self.get_replacement()
+        except (KeyError, AttributeError):
+            self.raise_()
         # We don't want to catch an empty string,
         if replacement is None:  # So we need the more specific test.
             return  # i.e. don't touch this.
         else:
             self.replace_w_str(replacement)
 
-    def no_children(self):
-        """Return true if self has no children"""
-        return len(self) == 0
-
     def _process_text_contents(self, text):
         """Function called to manipulate text in tags or tail when first parsed.
         """
         return LatexText(text)
 
-    def delete(self):
-        """Remove this tag from the tree, preserving its tail"""
-        parent = self.add_to_previous(self.tail)
-        parent.remove(self)
-
     def get_replacement(self):
         """Called to get a string replacement for a tag"""
         raise NotImplementedError(self)
 
-    def unwrap(self):
-        """Replace tag with contents, including children"""
-        children = list(self.iterchildren(reversed=True))
-        if not len(children):
-            self.replace_w_str(self.text)
-        else:
-            parent = self.getparent()
-            index = parent.index(self)
-            last_child = children[-1]
-            last_child.tail = self.textjoin(last_child.tail, self.tail)
-            parent = self.add_to_previous(self.textjoin(self.text, self.tail))
-            for child in children:
-                parent.insert(index, child)
-
-    def replace_w_str(self, replacement):
-        """Replace tag with string"""
-        replacement = self.textjoin(replacement, self.tail)
-        parent = self.add_to_previous(replacement)
-        parent.remove(self)
-
-    def add_to_previous(self, addition):
-        """Add text to the previous tag"""
-        previous = self.getprevious()
-        parent = self.getparent()
-        if previous is not None:
-            previous.tail = self.textjoin(previous.tail, addition)
-        else:
-            parent.text = self.textjoin(parent.text, addition)
-        return parent
-
     def raise_(self):
         """Raise an implementation error with self as argument"""
         raise ImplementationError(self)
-
-    def required_key(self, key):
-        x = self.get(key)
-        if x:
-            return x
-        self.raise_()
 
     def _check_if_in_body(self):
         note_ancestors = self.iterancestors('{*}note')
@@ -201,13 +64,6 @@ class TEITag(etree.ElementBase):
             return False
         return True
 
-    @staticmethod
-    def textjoin(a, b):
-        """Join a and b, replacing either with an empty string
-        if their value is not True"""
-        return ''.join([(a or ''), (b or '')])
-
-# STANDARD
 
 
 class Head(TEITag):
@@ -231,7 +87,7 @@ class Head(TEITag):
             return self.process_head_level_two()
 
         try:
-            identifier = parent_attrs['%sid' % XML_NAMESPACE]
+            identifier = parent_attrs['{%s}id' % config['xml_namespace']]
         except KeyError:
             self.raise_()
 
@@ -382,11 +238,8 @@ class VerseLine(TEITag):
     targets = ['l']
 
     def get_replacement(self):
-        if self.tail:
-            self.tail = self.tail.strip()
-        if self.text:
-            self.text = self.text.strip()
-
+        self.tail = self.tail.strip() if self.tail else ''
+        self.text = self.text.strip() if self.text else ''
         return '%s &\n' % self.text
 
 
@@ -394,8 +247,8 @@ class Foreign(TEITag):
     targets = ['foreign']
 
     def get_replacement(self):
-        langcode = self.get('%slang' % XML_NAMESPACE)
-        language = LANGUAGES.get(langcode)
+        langcode = self.get('{%s}lang' % config['xml_namespace'])
+        language = config['languages'].get(langcode)
         if language:
             return '\\text%s{%s}' % (language, self.text)
         return self.text
@@ -407,155 +260,33 @@ class FloatingText(TEITag):
     def get_replacement(self):
         floattype = self.get('type')
         if floattype == 'verse':
-            return '\n\\vspace{5mm}%s\\vspace{5mm}\n' % self.text
+            return self._verse()
         elif floattype == 'addition':
-            return '\\pstart %s\\pend' % self.text
+            return self._addition()
         self.raise_()
 
+    def _verse(self):
+        return '\n\\vspace{5mm}%s\\vspace{5mm}\n' % self.text
 
-class ExternalReferenceTag(TEITag):
-
-    def ex_ref(self, key):
-        key = self.required_key(key)
-        return key[1:]
-
-    def key_or_empty(self, key):
-        return self.get(key) or ''
-
-
-class Ptr(ExternalReferenceTag, FmtMethods):
-
-    targets = ['ptr']
-
-    def get_replacement(self):
-        target = self.ex_ref('target')
-        kind = self.get('type')
-
-        bib = kind == 'bibliog'
-        crossref = kind == 'crossref'
-
-        if bib:
-            pre = self.key_or_empty('pre')
-            if pre:
-                pre = self.square_brackets(pre)
-            n = self.key_or_empty('n')
-            if pre or n:
-                n = self.square_brackets(n)
-            return ' \\autocite%s%s{%s}' % (pre, n, target)
-        elif crossref:
-            return '\\pageref{%s}' % target
-
-        self.raise_()
-
-
-class PersName(ExternalReferenceTag):
-    targets = ['persName']
-
-    def _init(self):
-        super()._init()
-        self.in_body = self._check_if_in_body()
-
-    def get_replacement(self, persdict, in_body):
-        ref = self.ex_ref('ref')
-        if ref == '??':
-            return '\\unknownperson{%s}' % self.text
-
-        if not in_body:
-            self.in_body = False
-
-        person = persdict[ref]
-        indexonly = person.indexonly is True
-        indexname = person.indexname
-        if indexonly or not self.in_body:
-            if not self.in_body:
-                indexname += '|innote'
-            return '\\indexperson{%s}{%s}' % (indexname, self.text)
-        else:
-            description = person.description
-            dt = (ref, indexname, description, self.text)
-            return '\\person{%s}{%s}{%s}{%s}' % dt
+    def _addition(self):
+        return '\\pstart %s\\pend' % self.text
 
 
 class Label(TEITag):
     targets = ['label']
 
     def get_replacement(self):
-        n = self.required_key('n')
-        return '\\label{%s}' % n
+        return '\\label{%s}' % self.attrib['n']
 
 
 class Space(TEITag):
     targets = ['space']
 
     def get_replacement(self):
-        n = self.get('n')
-        if n == 'vertical':
-            return '\\bigskip'
-        elif n == 'horizontal':
-            return '\\hfill{}'
-        else:
-            return '\\qquad{}'
-        self.raise_()
-
-
-class Div(TEITag):
-    targets = ['div']
-
-    def get_replacement(self):
-        divtype = self.get('type')
-        if not divtype:
-            return self.unwrap()
-        elif divtype in ['month', 'year']:
-            date = self.required_key('n')
-            if divtype == 'month':
-                year = self._find_year()
-                assert year
-                before = '\n\\addcontentsline{toc}{chapter}\
-                      {%s %s}' % (date, year)
-            elif divtype == 'year':
-                before = '\n\\addcontentsline{toc}{part}{%s}' % date
-
-            self.add_to_previous(before)
-        return self.unwrap()
-
-    def _find_year(self):
-        for parent in self.iterancestors('{*}div'):
-            if parent.get('type') == 'year':
-                return parent.required_key('n')
-
-
-class PageBreak(TEITag):
-    targets = ['pb']
-
-    def _init(self):
-        super()._init()
-        has_tail = self.tail is not None
-        previous = self.getprevious()
-        has_previous = previous is not None
-
-        if has_tail:
-            self.tail = self.tail.lstrip()
-        if has_previous:
-            if previous.tail:
-                previous.tail = previous.tail.rstrip()
-
-    def get_replacement(self):
-
-        pagenumber = self.required_key('n')
-        pagenumber = pagenumber.lstrip('0')
-        if pagenumber == '1':
-            return self.delete()
-
-        parent = self.getparent()
-        try:
-            in_text = parent.localname in ['p', 'lg']
-        except AttributeError:
-            self.raise_()
-
-        if in_text:
-            return ' \\intextpagebreak{[%s]} ' % pagenumber
-        else:
-            return '\n\\floatpagebreak{[%s]}\n' % pagenumber
+        maps = {'vertical': '\\bigskip',
+             'horizontal': '\\hfill{}'}
+        space = maps.get(self.get('n'))
+        return space if space else '\\qquad{}'
 
 
 class Deletion(TEITag):
@@ -566,8 +297,7 @@ class Deletion(TEITag):
             return self.delete()
         elif self.get('hand'):
             return '\\sout{%s}' % self.text
-        else:
-            self.raise_()
+        self.raise_()
 
 
 class Add(TEITag):
@@ -576,145 +306,228 @@ class Add(TEITag):
     def get_replacement(self):
         return '\\addition{%s}' % self.text
 
-
-class FilterTag(TEITag):
-
-    def filterchildren(self, targets):
-        searchtargets = map(lambda s: '{*}%s' % s, targets)
-        for x in self.iterchildren(searchtargets):
-            yield x.localname, x
-            targets.remove(x.localname)
-
-        if len(targets) != 0:
-            self.raise_()
-
-
-class Choice(FilterTag):
-    targets = ['choice']
+class Ptr(TEITag):
+    
+    targets = ['ptr']
 
     def get_replacement(self):
-        for name, tag in self.filterchildren(['sic', 'corr']):
-            if name == 'sic':
-                sic_text = tag.text
-            elif name == 'corr':
-                corr_text = tag.text
+        _type = self.attrib['type']
+        if _type == 'bibliog':
+            return self._bibliog()
+        elif _type == 'crossref':
+            return self._crossref()
+        self.raise_()
 
-        return '\\correction{%s}{%s}' % (corr_text, sic_text)
+    def _target(self):
+        return self.attrib['target'][1:]
+
+    def _bibliog(self):
+        pre = self.get('pre') or ''
+        n = self.get('n') or ''
+        square = lambda t: '[%s]' % t
+        if pre:
+            pre = square(pre)
+        if pre or n:
+            n = square(n)
+        return ' \\autocite%s%s{%s}' % (pre, n, self._target())
+
+    def _crossref(self):
+        return '\\pageref{%s}' % self._target()
 
 
-class TextualVariant(FilterTag):
-    targets = ['app']
+class Div(TEITag):
+    targets = ['div']
 
     def get_replacement(self):
-        rdgs = []
-        for name, tag in self.filterchildren(['lem', 'rdg']):
-            if name == 'lem':
-                lem_text = tag.text
-            elif name == 'rdg':
-                rdgs.append(tag)
+        divtype = self.get('type')
+        if divtype in ['month', 'year']:
+            self._process_date(divtype)
+        return self.unwrap()
 
-        rdgs = map(self.rdgs_map, rdgs)
-        return ' \\variants{%s}{%s}' % (lem_text, ' '.join(rdgs))
+    def _process_date(self, divtype):
+        if divtype == 'month':
+            add = self.process_month()
+        elif divtype == 'year':
+            add = self.process_year()
+        self.add_to_previous(add)
+
+    def process_month(self):
+        for parent in self.iterancestors('{*}div'):
+            if parent.get('type') == 'year':
+                year = parent.attrib['n']
+                break
+        return '\n\\addcontentsline{toc}{chapter}\
+                {%s %s}' % (self.attrib['n'], year)
+
+    def process_year(self):
+        return '\n\\addcontentsline{toc}{part}{%s}' % self.attrib['n']
+
+class Fmt():
+
+    def __new__(cls, rend, name):
+
+        fmt_names = config['fmt_names']
+        monopoly = lambda key: frozenset(fmt_names[key])
+
+        fmt_keys = ['emph', 'single', 'double', 'superscript', 'smcp']
+        fmts = [monopoly(key) for key in fmt_keys]
+
+        fmt_fmts = [('\\emph{', '}'), ("`", "'"), ("``", "''"),
+                    ('\\textsuperscript{', '}'), ('\\textsc{', '}')]
+                    
+        fmt_funcs = {n: cls._wrap(*f) for n, f in zip(fmts, fmt_fmts)}
+
+        for group in fmts:
+            if rend in group:
+                return fmt_funcs[group]
+
+        return cls.by_default(name, fmt_funcs[fmts[1]], fmt_funcs[fmts[0]])
+
+    def __init__(self):
+        pass
 
     @staticmethod
-    def rdgs_map(rdg):
-        try:
-            wit = rdg.attrib['wit']
-        except KeyError:
-            rdg.raise_()
-        return '\\wit{%s}{%s}' % (rdg.text, wit)
+    def _wrap(before, after):
+        return partial('{0}{2}{1}'.format, before, after)
 
-# FURTHER SUBCLASSING.
+    @classmethod
+    def by_default(cls, name, single, emph):
+        if name in ['soCalled', 'q']:
+            return single
+        elif name == 'supplied':
+            return cls._wrap('«', '»')
+        elif name == 'bibl':
+            return cls._wrap('', '')
+        elif name in ['hi']:
+            return emph
 
 
-class SoCalled(TEITag, FmtMethods):
-    targets = ['soCalled']
+class FmtTag(TEITag):
+    """A tag dependent on common formatting rules."""
+
+    targets = ['soCalled', 'supplied', 'bibl', 'hi', 'q']
 
     def get_replacement(self):
-        return self.single_quotes()
-
-
-class Supplied(TEITag, FmtMethods):
-    targets = ['supplied']
-
-    def get_replacement(self):
-        return self._wrap('«', '»')
-
-
-class RendTag(TEITag, FmtMethods):
-
-    def _rendery(self, required=False):
-        if not required:
-            rend = self.get('rend')
-        else:
-            rend = self.required_key('rend')
-        for targets, func in self.fmt_lists():
-            if rend in targets:
-                return func()
+        fmt_func = Fmt(self.get('rend'), self.localname)
+        if fmt_func:
+            return fmt_func(self.text)
         self.raise_()
 
 
-class Bibl(RendTag):
-    targets = ['bibl']
+class GenericTag(TEITag):
+    """"Tags to be handled in a generic way."""
+
+    deletes = ['lb']
+    no_actions = ['corr', 'sic', 'lem', 'rdg']
+    text_replaces = ['body', 'time', 'list', 'item', 'name']
+    unwraps = ['subst', 'trait']
+    targets = deletes + no_actions + text_replaces + unwraps
 
     def get_replacement(self):
-        return self._rendery()
+        name = self.localname
+        if name in self.text_replaces:
+            return self.text
+        elif name in self.unwraps:
+            return self.unwrap()
+        elif name in self.deletes:
+            return self.delete()
 
+class FilterTag(TEITag):
 
-class Hi(RendTag):
-    targets = ['hi']
+    """Tag handled with its children"""
 
-    def get_replacement(self):
-        return self._rendery(required=True)
-
-
-class Quote(RendTag):
-    targets = ['q']
-
-    def handle_none(self):
-        return self.single_quotes()
+    targets = ['app', 'choice']
 
     def get_replacement(self):
-        return self._rendery()
+        if self.localname == 'choice':
+            return self._choice()
+        else:
+            return self._app()
 
-# SIMPLE ONES:
+    def _choice(self):
+        kids = map(self.textfinder, ['{*}corr', '{*}sic'])
+        return '\\correction{%s}{%s}' % tuple(kids)
 
+    def _app(self):
+        rdgs = self.iterchildren('{*}rdg') 
+        witmaker = lambda tag: '\\wit{%s}{%s}' % (tag.text, tag.attrib['wit'])
+        witnesses = ' '.join([witmaker(x) for x in rdgs])
+        lem = self.textfinder('{*}lem')
+        return '\\variants{%s}{%s}' % (lem, witnesses)
 
-class DeleteMe(TEITag):
-
-    """Delete tags of this type"""
-
-    targets = ['lb']
-
-    def get_replacement(self):
-        return self.delete()
-
-
-class DontTouchMe(TEITag):
-
-    """Take no action with tags of this type"""
-
-    targets = ['corr', 'sic', 'lem', 'rdg']
-
-    def get_replacement(self):
-        return None
+    def textfinder(self, term):
+        x = self.find(term)
+        if x is None:
+            self.raise_()
+        return x.text
 
 
-class ReplaceMeWText(TEITag):
+class PageBreak(TEITag):
+    targets = ['pb']
 
-    """Replace tags of this type with their text"""
-
-    targets = ['body', 'time', 'list', 'item', 'name']
-
-    def get_replacement(self):
-        return self.text
-
-
-class UnWrapMe(TEITag):
-
-    """Unwrap tags of this type"""
-
-    targets = ['subst', 'trait']
+    def _init(self):
+        super()._init()
+        if self.tail:
+            self.tail = self.tail.lstrip()
+        previous = self.getprevious()
+        if previous is not None and previous.tail:
+            previous.tail = previous.tail.rstrip()
 
     def get_replacement(self):
-        return self.unwrap()
+        page_number = self._pagenumber()
+        if page_number == '1':
+            return self.delete()
+        elif self._in_text():
+            return self._text(page_number)
+        else:
+            return self._float(page_number)
+        
+    def _pagenumber(self):
+        return self.attrib['n'].lstrip('0')
+        if pagenumber == '1':
+            return self._no_show()
+        return p
+
+    def _in_text(self):
+        return self.getparent().localname in ['p', 'lg']
+
+    def _float(self, pagenumber):
+        return '\n\\floatpagebreak{[%s]}\n' % pagenumber
+
+    def _text(self, pagenumber):
+        return ' \\intextpagebreak{[%s]} ' % pagenumber
+
+
+
+class PersName(TEITag):
+    targets = ['persName']
+
+    def _init(self):
+        super()._init()
+        self.in_body = self._check_if_in_body()
+
+    def get_replacement(self):
+        ref = self.attrib['ref'][1:]
+        
+        if ref == '??':
+            return self._unknown()
+        return self._known(ref)
+
+    def _unknown(self):
+        return '\\unknownperson{%s}' % self.text
+
+    def _known(self, ref):
+
+        person = self.persdict[ref]
+
+        def _index():
+            t = (person.indexname + '|innote', self.text)
+            return '\\indexperson{%s}{%s}' % t
+
+        def _person():
+            t = (ref, person.indexname, person.description, self.text)
+            return '\\person{%s}{%s}{%s}{%s}' % t
+
+        if person.indexonly or not self.in_body:
+            return _index()
+        return _person()
