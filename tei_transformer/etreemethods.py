@@ -36,17 +36,17 @@ class EtreeMethods():
         """Replace tag with contents, including children"""
         children = list(self.iterchildren(reversed=True))
         if not len(children):
-            self.replace_w_str(self.text)
+            self.string_replace(self.text)
         else:
             parent = self.getparent()
-            index = parent.index(self)
+            my_index = parent.index(self)
             last_child = children[-1]
             last_child.tail = self.textjoin(last_child.tail, self.tail)
             parent = self.add_to_previous(self.textjoin(self.text, self.tail))
             for child in children:
-                parent.insert(index, child)
+                parent.insert(my_index, child)
 
-    def replace_w_str(self, replacement):
+    def string_replace(self, replacement):
         """Replace tag with string"""
         replacement = self.textjoin(replacement, self.tail)
         parent = self.add_to_previous(replacement)
@@ -64,6 +64,6 @@ class EtreeMethods():
 
     @staticmethod
     def textjoin(a, b):
-        """Join a and b, replacing either with an empty string
-        if their value is not True"""
+        """Join a and b, replacing either one with an empty string
+        if that one is not truthy."""
         return ''.join([(a or ''), (b or '')])

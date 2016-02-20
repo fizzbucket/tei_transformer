@@ -120,10 +120,7 @@ resources:
 caller_command: latexmk -g -cd -pdf -bibtex
 
 string_replacements:
-  - ['Horowhenua', 'Horo\-whenua']
-  - ['Trémouille', 'Tré\-mouille']
-  - ['HQ. C.O.', 'HQ.~C.O.']
-  - ['C.O. Battalion', 'C.O.~Battalion']
+  - ['x', 'x']
 
 regex_replacements:
   - ['\ +', ' ']

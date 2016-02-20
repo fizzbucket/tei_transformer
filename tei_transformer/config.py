@@ -11,6 +11,6 @@ def update_config(curdir):
     try:
         with open(custom_settings) as f:
             custom_settings = yaml.load(f)
-        config.extend(custom_settings)
+        config.update(custom_settings)
     except FileNotFoundError:
         pass

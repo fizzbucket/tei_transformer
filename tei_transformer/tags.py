@@ -40,10 +40,10 @@ class TEITag(etree.ElementBase, EtreeMethods):
         except (KeyError, AttributeError):
             self.raise_()
         # We don't want to catch an empty string,
-        if replacement is None:  # So we need the more specific test.
-            return  # i.e. don't touch this.
+        if replacement is None:
+            return
         else:
-            self.replace_w_str(replacement)
+            self.string_replace(replacement)
 
     def _process_text_contents(self, text):
         """Function called to manipulate text in tags or tail when first parsed.
@@ -60,10 +60,7 @@ class TEITag(etree.ElementBase, EtreeMethods):
 
     def _check_if_in_body(self):
         note_ancestors = self.iterancestors('{*}note')
-        if any(True for _ in note_ancestors):
-            return False
-        return True
-
+        return not bool(any(True for _ in note_ancestors))
 
 
 class Head(TEITag):
@@ -77,7 +74,7 @@ class Head(TEITag):
         if not self.tail or not self.tail.strip():
             next_sibling = self.getnext()
             if next_sibling is not None and next_sibling.localname == 'p':
-                if next_sibling.get('rend') is None:
+                if not next_sibling.get('rend'):
                     t = next_sibling.text or ''
                     next_sibling.text = '\\noindent %s' % t
 
@@ -104,7 +101,7 @@ class Head(TEITag):
         return '\\pstart\n\\eledchapter*{%s}\n\\pend' % self.text
 
     def process_head_level_three(self, identifier):
-        if identifier is None:
+        if not identifier:
             self.raise_()
         month = identifier[:3]
         # Assumes gregorian calendar
@@ -147,16 +144,16 @@ class TextualNote(TEITag):
         return self.unabbreviated_lemma(marker)
 
     def abbreviated_lemma(self, marker, abbreviation):
-        marker.replace_w_str('\\annotationlem{')
+        marker.string_replace('\\annotationlem{')
         abbreviation = self._process_text_contents(abbreviation)
         return '}{%s}{%s}' % (abbreviation, self.text)
 
     def unabbreviated_lemma(self, marker):
-        marker.replace_w_str('\\annotation{')
+        marker.string_replace('\\annotation{')
         return '}{%s}' % self.text
 
     def empty(self):
-        return self.text is None and len(self.getchildren()) == 0
+        return not self.text and len(self.getchildren()) == 0
 
     def get_marker(self):
         skip = 0
@@ -173,51 +170,58 @@ class TextualNote(TEITag):
 class Paragraph(TEITag):
     targets = ['p']
 
+    def _init(self):
+        super()._init()
+        self._in_bio = None
+
+    @property
+    def in_bio(self):
+        if not isinstance(self._in_bio, bool):
+            self._in_bio = self.getparent().localname == 'trait'
+        return self._in_bio
+
     def get_replacement(self):
+        text = self.prepare_text()
+        non_body = self.in_bio or not self._check_if_in_body()
+        if non_body:
+            return self._handle_non_body_para(text)
+        return self._handle_body_para(text)
 
-        in_bio = self.getparent().localname == 'trait'
+    def _handle_non_body_para(self, text):
+        has_following = self.getnext() is not None or self.tail
+        if not text or not has_following:
+            return text
+        return '%s\\par ' % text
 
-        if in_bio:
-            if not self.text:
-                return ''
-        try:
-            self.text = self.text.strip()
-        except AttributeError:
-            self.raise_()
-
-        paratext = self.text.replace('\n', ' ')
-
-        if in_bio or not self._check_if_in_body():
-            if self.getnext() is not None or self.tail:
-                return '%s\\par ' % paratext
-            else:
-                return paratext
-
+    def _handle_body_para(self, text):
         rend = self.get('rend')
-        if rend == 'noindent':
-            indent = '\\noindent'
-        elif rend == 'indent':
-            indent = '\\indent'
-        elif rend == 'doubleindent':
-            indent = '\\doubleindent'
-        else:
+        if rend in ['noindent', 'indent', 'doubleindent']:
+            indent = '\\' + rend
+        elif self.after_header():
             # Our headers are wrapped in an eledmac paragraph.
             # So latex doesn't know not to indent them.
-            indent = self._after_head_indent()
+            indent = '\\noindent'
+        else:
+            indent = ''
+        return ' '.join(['\n\\pstart', indent, text, '\\pend'])
 
-        return ' '.join(['\n\\pstart', indent, paratext, '\\pend'])
-
-    def _after_head_indent(self):
-        previous = self.getprevious()
-        if previous is not None and previous.localname == 'head':
-            # There was a tag there, but it's been processed already.
-            if previous.tail and previous.tail.strip():
+    def prepare_text(self):
+        try:
+            return self.text.strip().replace('\n', ' ')
+        except AttributeError:
+            if self.in_bio: # ie don't necessarily need text
                 return ''
-            # We're the first thing following.
-            else:
-                return '\\noindent'
-        # Not a head. Default to no indent.
-        return ''
+            self.raise_()
+
+    def after_header(self):
+        previous = self.getprevious()
+        try:
+            head = previous.localname == 'head'
+            tail = previous.tail and previous.tail.strip()
+            if head and not tail:
+                return True
+        except AttributeError:
+            pass
 
 
 class VerseLineGroup(TEITag):
@@ -271,6 +275,13 @@ class FloatingText(TEITag):
     def _addition(self):
         return '\\pstart %s\\pend' % self.text
 
+
+# class SimpleTag(TEITag):
+#     """Tag to be replaced using very simple rules"""
+#     targets = ['label', 'add', 'space', 'deletion']
+
+#     def get_replacement(self):
+#         pass
 
 class Label(TEITag):
     targets = ['label']
@@ -360,7 +371,10 @@ class Div(TEITag):
                 {%s %s}' % (self.attrib['n'], year)
 
     def process_year(self):
-        return '\n\\addcontentsline{toc}{part}{%s}' % self.attrib['n']
+        n = self.attrib['n']
+        new_end = ''# '\\addtoendnotes{\\bigskip{}\\textbf{%s}\\bigskip{}}' % n
+        new_contents = '\\addcontentsline{toc}{part}{%s}' % n
+        return '\n%s %s' % (new_contents, new_end)
 
 class Fmt():
 
@@ -449,7 +463,7 @@ class FilterTag(TEITag):
         return '\\correction{%s}{%s}' % tuple(kids)
 
     def _app(self):
-        rdgs = self.iterchildren('{*}rdg') 
+        rdgs = self.iterchildren('{*}rdg')
         witmaker = lambda tag: '\\wit{%s}{%s}' % (tag.text, tag.attrib['wit'])
         witnesses = ' '.join([witmaker(x) for x in rdgs])
         lem = self.textfinder('{*}lem')
@@ -531,3 +545,57 @@ class PersName(TEITag):
         if person.indexonly or not self.in_body:
             return _index()
         return _person()
+
+# END OF TAGS
+
+class ParserMethods():
+    """Methods for parsing and transforming XML."""
+
+    def __init__(self):
+        self._parser = None
+
+    @staticmethod
+    def transform_tree(tree, persdict, in_body=True):
+        """Transform a tree."""
+        for tag in sorted(list(tree.getiterator('*'))):
+            if tag.localname == 'persName':
+                tag.process(persdict, in_body=in_body)
+            else:
+                tag.process()
+        return tree
+
+    @property
+    def parser(self):
+        """Return a parser. A property not an attribute
+           so that the parser can be constructed w/r/t
+           a config that takes account of user settings.
+        """
+        if not self._parser:
+            self._parser = self.make_parser()
+        return self._parser
+
+    def parse(self, textpath):
+        """Parse textpath"""
+        return etree.parse(textpath, self.parser)
+
+    @classmethod
+    def make_parser(cls):
+        """Create a parser with custom tag handling."""
+        parser = etree.XMLParser(**config['parser_options'])
+        lookup = etree.ElementNamespaceClassLookup()
+        parser.set_element_class_lookup(lookup)
+        namespace = lookup.get_namespace('http://www.tei-c.org/ns/1.0')
+        namespace[None] = TEITag
+
+        def _handlers(target_class):
+            for subcls in target_class.__subclasses__():
+                yield from _handlers(subcls)
+                if hasattr(subcls, 'targets') and subcls.targets:
+                    for target in subcls.targets:
+                        yield subcls, target
+
+        for handler, target in _handlers(TEITag):
+            namespace[target] = handler
+        return parser
+
+parser = ParserMethods()
