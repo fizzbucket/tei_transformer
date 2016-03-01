@@ -13,54 +13,65 @@ class ImplementationError(Exception):
     pass
 
 
+class TagProcessor():
+
+    def __init__(self, tag, persdict=None, in_body=True):
+        self._check_no_children(tag)
+        if tag.localname == 'persName':
+            self._handle_persname(tag, persdict, in_body)
+        replacement = self._get_replacement(tag)
+        self._handle_replacement(tag, replacement)
+
+    @staticmethod
+    def _check_no_children(tag):
+        not_good_children = tag.localname not in ['choice', 'app']
+        if not len(tag) == 0 and not_good_children:
+            tag.raise_()
+
+    @staticmethod
+    def _handle_persname(tag, persdict, in_body):
+        tag.persdict = persdict
+        tag.in_body = in_body and tag.in_body
+
+    @staticmethod
+    def _get_replacement(tag):
+        try:
+            return tag.get_replacement()
+        except (KeyError, AttributeError):
+            tag.raise_()
+
+    @staticmethod
+    def _handle_replacement(tag, replacement):
+        if isinstance(replacement, str):
+            return tag.string_replace(replacement)
+        elif replacement is None: # Deferred processing
+            return
+        tag.raise_()
+
+
 class TEITag(etree.ElementBase, EtreeMethods):
 
     def _init(self):
         self.transform_text()
 
     def transform_text(self):
+        """Initial processing of tags on parsing"""
         if self.text:
-            self.text = self._process_text_contents(self.text)
+            self.text = LatexText(self.text)
         if self.tail:
-            self.tail = self._process_text_contents(self.tail)
+            self.tail = LatexText(self.tail)
 
-    def process(self, persdict=None, in_body=True):
-
-        # Check to see we won't accidentally wipe something out.
-        not_good_children = self.localname not in ['choice', 'app']
-        if not len(self) == 0 and not_good_children:
-            self.raise_()
-        # Now on with the replacement.
-        if self.localname == 'persName':
-            self.persdict = persdict
-            self.in_body = in_body and self.in_body
-
-        try:
-            replacement = self.get_replacement()
-        except (KeyError, AttributeError):
-            self.raise_()
-        # We don't want to catch an empty string,
-        if replacement is None:
-            return
-        else:
-            self.string_replace(replacement)
-
-    def _process_text_contents(self, text):
-        """Function called to manipulate text in tags or tail when first parsed.
-        """
-        return LatexText(text)
+    def process(self, *args, **kwargs):
+        return TagProcessor(self, *args, **kwargs)
 
     def get_replacement(self):
         """Called to get a string replacement for a tag"""
         raise NotImplementedError(self)
 
-    def raise_(self):
+    def raise_(self, *args):
         """Raise an implementation error with self as argument"""
-        raise ImplementationError(self)
+        raise ImplementationError(self, *args)
 
-    def _check_if_in_body(self):
-        note_ancestors = self.iterancestors('{*}note')
-        return not bool(any(True for _ in note_ancestors))
 
 
 class Head(TEITag):
@@ -69,30 +80,55 @@ class Head(TEITag):
 
     def get_replacement(self):
         """ Return the replacement for a tag of type <head>"""
+        self._next_para_no_indent()
+        divtype, identifier = self._type_and_identifier()
+        handler = self._handler(divtype)
+        if identifier:
+            return handler(identifier)
+        return handler()
 
-        # Make explicit the desire not to indent following paragraph.
-        if not self.tail or not self.tail.strip():
-            next_sibling = self.getnext()
-            if next_sibling is not None and next_sibling.localname == 'p':
-                if not next_sibling.get('rend'):
-                    t = next_sibling.text or ''
-                    next_sibling.text = '\\noindent %s' % t
+    def _next_para_no_indent(self):
+        """Make sure next paragraph isn't indented"""
 
+        def _no_para_rend():
+            try:
+                next_sibling = self.getnext()
+                next_is_para = next_sibling.localname == 'p'
+                no_rend_info = not next_sibling.get('rend')
+                para_no_rend = next_is_para and no_rend_info
+            except AttributeError:
+                    pass
+
+        no_tail = not self.tail or not self.tail.strip()
+
+        if no_tail and _no_para_rend():
+            t = next_sibling.text or ''
+            next_sibling.text = '\\noindent %s' % t
+
+
+    def _type_and_identifier(self):
+        need_identifier_list = ['diaryentry', 'diaryentrysection']
         parent_attrs = self.getparent().attrib
-        div_type = parent_attrs['type']
-        if div_type == 'title':  # Chapter
-            return self.process_head_level_two()
-
         try:
-            identifier = parent_attrs['{%s}id' % config['xml_namespace']]
+            divtype = parent_attrs['type']
+            if divtype in need_identifier_list:
+                identifier = parent_attrs['{%s}id' % config['xml_namespace']]
+            else:
+                identifier = None
+        except KeyError:
+            self.raise_()
+        return divtype, identifier
+
+    def _handler(self, divtype):
+        handlers = {'title': self.process_head_level_two,
+                    'diaryentry': self.process_head_level_three,
+                    'diaryentrysection': self.process_head_level_four,
+                    }
+        try:
+            return handlers[divtype]
         except KeyError:
             self.raise_()
 
-        if div_type == 'diaryentry':  # Section
-            return self.process_head_level_three(identifier)
-        elif div_type == 'diaryentrysection':  # Subsection
-            return self.process_head_level_four(identifier)
-        self.raise_()
 
     def process_head_level_one(self):
         return '\\part{%s}' % self.text
@@ -112,17 +148,17 @@ class Head(TEITag):
         date = identifier[3:identifier.find('_')]
         year = identifier[-4:]
         return '\n\\pstart\n\
-               \\eledsection[%s %s %s]{%s}\n\
+               \\eledsubsection{%s}\n\
                \\label{%s}\n\
                \\pend'\
-               % (date, month, year, self.text, identifier)
+               % (self.text, identifier)
 
     def process_head_level_four(self, identifier):
-        return '\\pstart\n\\eledsubsection{%s}\n\\label{%s}\n\\pend'\
+        return '\\pstart\n\\eledsubsubsection{%s}\n\\label{%s}\n\\pend'\
             % (self.text, identifier)
 
     def process_head_level_five(self, identifier):
-        return '\\pstart\n\\eledsubsubsection{%s}\n\\label{%s}\n\\pend'\
+        return '\\pstart\n\\paragraph{%s}\n\\label{%s}\n\\pend'\
             % (self.text, identifier)
 
 
@@ -145,7 +181,7 @@ class TextualNote(TEITag):
 
     def abbreviated_lemma(self, marker, abbreviation):
         marker.string_replace('\\annotationlem{')
-        abbreviation = self._process_text_contents(abbreviation)
+        abbreviation = LatexText(abbreviation)
         return '}{%s}{%s}' % (abbreviation, self.text)
 
     def unabbreviated_lemma(self, marker):
@@ -167,7 +203,13 @@ class TextualNote(TEITag):
         return False
 
 
-class Paragraph(TEITag):
+class InBodyCheck():
+
+    def _check_if_in_body(self):
+        note_ancestors = self.iterancestors('{*}note')
+        return not bool(any(True for _ in note_ancestors))
+
+class Paragraph(TEITag, InBodyCheck):
     targets = ['p']
 
     def _init(self):
@@ -209,9 +251,9 @@ class Paragraph(TEITag):
         try:
             return self.text.strip().replace('\n', ' ')
         except AttributeError:
-            if self.in_bio: # ie don't necessarily need text
-                return ''
-            self.raise_()
+            if not self.in_bio:
+                self.raise_()
+            return ''
 
     def after_header(self):
         previous = self.getprevious()
@@ -222,6 +264,39 @@ class Paragraph(TEITag):
                 return True
         except AttributeError:
             pass
+
+class PersName(TEITag, InBodyCheck):
+    targets = ['persName']
+
+    def _init(self):
+        super()._init()
+        self.in_body = self._check_if_in_body()
+
+    def get_replacement(self):
+        ref = self.attrib['ref'][1:]
+        
+        if ref == '??':
+            return self._unknown()
+        return self._known(ref)
+
+    def _unknown(self):
+        return '\\unknownperson{%s}' % self.text
+
+    def _known(self, ref):
+
+        person = self.persdict[ref]
+
+        def _index():
+            t = (person.indexname + '|innote', self.text)
+            return '\\indexperson{%s}{%s}' % t
+
+        def _person():
+            t = (ref, person.indexname, person.description, self.text)
+            return '\\person{%s}{%s}{%s}{%s}' % t
+
+        if person.indexonly or not self.in_body:
+            return _index()
+        return _person()
 
 
 class VerseLineGroup(TEITag):
@@ -241,9 +316,13 @@ class VerseLineGroup(TEITag):
 class VerseLine(TEITag):
     targets = ['l']
 
+    @staticmethod
+    def _textstrip(x):
+        return x.strip() if x else ''
+
     def get_replacement(self):
-        self.tail = self.tail.strip() if self.tail else ''
-        self.text = self.text.strip() if self.text else ''
+        self.tail = self._textstrip(self.tail)
+        self.text = self._textstrip(self.text)
         return '%s &\n' % self.text
 
 
@@ -335,7 +414,10 @@ class Ptr(TEITag):
     def _bibliog(self):
         pre = self.get('pre') or ''
         n = self.get('n') or ''
-        square = lambda t: '[%s]' % t
+        
+        def square(t):
+            return '[%s]' % t
+        
         if pre:
             pre = square(pre)
         if pre or n:
@@ -367,13 +449,13 @@ class Div(TEITag):
             if parent.get('type') == 'year':
                 year = parent.attrib['n']
                 break
-        return '\n\\addcontentsline{toc}{chapter}\
+        return '\n\\addcontentsline{toc}{section}\
                 {%s %s}' % (self.attrib['n'], year)
 
     def process_year(self):
         n = self.attrib['n']
         new_end = ''# '\\addtoendnotes{\\bigskip{}\\textbf{%s}\\bigskip{}}' % n
-        new_contents = '\\addcontentsline{toc}{part}{%s}' % n
+        new_contents = '\\addcontentsline{toc}{chapter}{%s}' % n
         return '\n%s %s' % (new_contents, new_end)
 
 class Fmt():
@@ -512,40 +594,6 @@ class PageBreak(TEITag):
         return ' \\intextpagebreak{[%s]} ' % pagenumber
 
 
-
-class PersName(TEITag):
-    targets = ['persName']
-
-    def _init(self):
-        super()._init()
-        self.in_body = self._check_if_in_body()
-
-    def get_replacement(self):
-        ref = self.attrib['ref'][1:]
-        
-        if ref == '??':
-            return self._unknown()
-        return self._known(ref)
-
-    def _unknown(self):
-        return '\\unknownperson{%s}' % self.text
-
-    def _known(self, ref):
-
-        person = self.persdict[ref]
-
-        def _index():
-            t = (person.indexname + '|innote', self.text)
-            return '\\indexperson{%s}{%s}' % t
-
-        def _person():
-            t = (ref, person.indexname, person.description, self.text)
-            return '\\person{%s}{%s}{%s}{%s}' % t
-
-        if person.indexonly or not self.in_body:
-            return _index()
-        return _person()
-
 # END OF TAGS
 
 class ParserMethods():
@@ -590,9 +638,11 @@ class ParserMethods():
         def _handlers(target_class):
             for subcls in target_class.__subclasses__():
                 yield from _handlers(subcls)
-                if hasattr(subcls, 'targets') and subcls.targets:
+                try:
                     for target in subcls.targets:
                         yield subcls, target
+                except AttributeError:
+                    pass
 
         for handler, target in _handlers(TEITag):
             namespace[target] = handler

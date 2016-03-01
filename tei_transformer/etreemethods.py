@@ -65,5 +65,5 @@ class EtreeMethods():
     @staticmethod
     def textjoin(a, b):
         """Join a and b, replacing either one with an empty string
-        if that one is not truthy."""
+        if that one evaluates to none or false."""
         return ''.join([(a or ''), (b or '')])

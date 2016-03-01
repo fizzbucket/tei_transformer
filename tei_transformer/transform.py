@@ -25,6 +25,7 @@ class Transformer():
         self.make_pdf(latex, force, *workfiles)
 
     def transform(self, inputpath, personlistpath):
+        """Transform xml to tex"""
         body = parser.parse(inputpath).getroot().find('.//{*}body')
         assert body is not None
         tree = parser.transform_tree(body, PersDict(personlistpath))
@@ -32,6 +33,8 @@ class Transformer():
 
     @staticmethod
     def latexify(bare_text, before, after):
+        """Wrap tex in preamble, intro, appendices, etc,
+        and apply any replacements and substitutions"""
         text = '\n'.join([before, bare_text, after])
         for fix in config['string_replacements']:
             text = text.replace(*fix)
@@ -41,6 +44,7 @@ class Transformer():
 
     @staticmethod
     def make_pdf(latex, force, working_tex, working_pdf, out_pdf):
+        """Make a pdf"""
         missing = not working_pdf.exists() or not working_tex.exists()
         if force or missing or hash(working_tex.text()) != hash(latex):
             working_tex.write_text(latex)
@@ -58,112 +62,163 @@ class Resources():
         and paths for writing temporary versions of tex and pdf, as well as the
         final output pdf"""
 
-    def __new__(cls, *args, **kwargs):
-        inputpath, outputname, resource_maker, basename_maker = \
-            cls._get_args(*args, **kwargs)
+    def __new__(cls, inputpath, outname=None, standalone=False):
+        r = cls._Resources(inputpath, outname, standalone)
+        return r.freeze()
 
-        classifications = config['resource_classifications']
-        resources = {k: [resource_maker(r) for r in v] for k, v
-                     in classifications.items()}
+    def __init__(self):
+        pass
+    
+    class _Resources():
 
-        def groups(target):
-            return iter(resources[target])
+        def __init__(self, inputpath, outname, standalone):
+            self.standalone = standalone
+            self.basepaths = self.BasePathMaker(inputpath, outname)
+            self._processed_resources = self._process_resources()
 
-        # input path, path to personlist
-        parsepaths = inputpath, next(groups('parsepath'))
-        # text to go before and after transformed inputpath
-        texts = map('\n'.join, map(groups, ['before_text', 'after_text']))
-        # Paths to write working text, working pdf, and final output pdf.
-        working_tex, working_pdf = map(basename_maker, ['.tex', '.pdf'])
-        workpaths = working_tex, working_pdf, outputname
+        def _resources_by_classification_key(self, key):
+            return iter(self.processed_resources[key])
 
-        nt = namedtuple('Paths', ['inputpaths', 'textwraps', 'workfiles'])
-        return nt(parsepaths, texts, workpaths)
+        def parsepaths(self):
+            parsepath_resources = self._resources_by_classification_key('parsepaths')
+            return tuple(self.basepaths.inputpath, *parsepath_resources)
+
+        def texts(self):
+            before = self._resources_by_classification_key('before_text')
+            after = self._resources_by_classification_key('after_text')
+            return map('\n'.join, [before, after])
+
+        def workpaths(self):
+            return tuple(*self.basepaths.working_paths())
+
+        def freeze(self):
+            nt = namedtuple('Paths', ['inputpaths', 'textwraps', 'workfiles'])
+            return nt(self.parsepaths(), self.texts(), self.workpaths())
+
+        def _process_resources(self):
+
+            def _rp_args(self):
+                bp = self.basepaths
+                return bp.work_dir, bp.resource_dir, bp.basename
+
+            resourceprocessor = self.ResourceProcessor(self.standalone, *_rp_args())
+            classifications = config['resource_classifications']
+            return {k: [resourceprocessor(r) for r in v] for k, v
+                    in classifications.items()} # Note possibility of hidden resources.
+
+        class ResourceProcessor():
+
+            def __init__(self, standalone, work_dir, resource_dir, basename):
+                self.work_dir = work_dir
+                self.resource_dir = resource_dir
+                self.standalone = standalone
+                self.resources = config['resources']
+
+            def __call__(self, resource_name):
+                resource = self.resources[resource_name]
+                name, text = self._read_resource(resource)
+                if resource.get('output') == 'read':
+                    return text
+                return self._write_resource(name, text)
+
+            def _resource_values(self, resource):
+                yield resource.get('name') or self.basename + resource['ext']
+                yield from map(resource.get, ['required', 'subst'])
+
+            def _read_resource(self, resource):
+                name, required, subst = self._resource_values(resource)
+                try:
+                    text = self.resource_dir.joinpath(name).text()
+                except FileNotFoundError as err:
+                    no_sub = subst in [None, False]
+                    if self.required or no_sub:
+                        raise err
+                    text = self._substitute_resource(resource, subst)
+                return name, text
+
+            def _substitute_resource(self, resource, subst):
+                sub_include = resource.get('sub_include')
+                if not sub_include or self.standalone:
+                    return subst
+                _sub = {'name': sub_include['name'],
+                        'subst': sub_include.get('subst') or ''}
+                r = self._read_resource(_sub)
+                w = self._write_resource(*r)
+                i = w.namebase if w else '%'
+                include = '\\include{%s}' % i
+                return subst % include
+
+            def _write_resource(self, name, text):
+                path = self.work_dir.joinpath(name)
+                path.write_text(text)
+                return path
+
+        class BasePathMaker():
+
+            def __init__(self, inputpath, outname):
+                self.inputpath = Path(inputpath)
+                self.curdir = self._curdir()
+                self.basename = inputpath.namebase
+                self.outname = outname or self.basename + '.pdf'
+                # properties
+                self._work_dir = None
+                self._resource_dir = None
+
+            def _curdir(self):
+                curdir = Path(self.inputpath.dirname() or os.curdir)
+                update_config(curdir)
+                return curdir
+
+            @property
+            def work_dir(self):
+                if not self._work_dir:
+                    self._work_dir = self.curdirjoin(config['workdir'])
+                    if not self._work_dir.exists():
+                        self._work_dir.mkdir()
+                return self._work_dir
+
+            @property
+            def resource_dir(self):
+                if not self._resource_dir:
+                    self._resource_dir = self.curdirjoin('resources')
+                    if not self._resource_dir.exists():
+                        raise IOError('Resources folder does not exist')
+                return self._resource_dir
+
+            def curdirjoin(self, addpath):
+                return self.curdir.joinpath(addpath)
+
+            def extendbasename(self, ext):
+                return self.work_dir.joinpath(self.basename + ext)
+
+            def working_paths(self):
+                yield from map(self.extendbasename, ['.tex', '.pdf'])
+                yield outname
+
+class PersDict():
+
+    def __new__(cls, path):
+        d = cls.people(path)
+        persdict = {x: p(d) for x, p in d.items()}
+        return cls.name_t_persdict(persdict)
 
     def __init__(self):
         pass
 
     @classmethod
-    def _get_args(cls, inputpath, outname=None, standalone=False):
-        inputpath = Path(inputpath)
-        basename = inputpath.namebase
-        curdir = Path(inputpath.dirname() or os.curdir)
-        update_config(curdir)
-        dirs = ['resources', config['workdir']]
-        resource_dir, work_dir = map(curdir.joinpath, dirs)
-        if not work_dir.exists():
-            work_dir.mkdir()
-        args = [work_dir, resource_dir, standalone,
-                basename, config['resources']]
+    def people(cls, path):
+        personlist = parser.parse(path).getroot()
+        people = personlist.iter('{*}person')
+        return {p.xml_id: p for p in map(cls.Person, people)}
 
-        def basename_maker(ext):
-            return work_dir.joinpath(basename + ext)
-
-        resource_maker = partial(cls._process_resource, *args)
-        outname = outname or basename + '.pdf'
-        return inputpath, outname, resource_maker, basename_maker
 
     @staticmethod
-    def _process_resource(work_dir, resource_dir, standalone,
-                          basename, resources, resource_name):
-        resource = resources[resource_name]
-
-        def _write_resource(name, text):
-            path = work_dir.joinpath(name)
-            path.write_text(text)
-            return path
-
-        def _read_resource(resource):
-            z = map(resource.get, ['name', 'required', 'subst'])
-            name, required, subst = z
-            name = name or basename + resource['ext']
-
-            def _read_substitute():
-                sub_include = resource.get('sub_include')
-                if not sub_include or standalone:
-                    return subst
-                _sub = {'name': sub_include['name'],
-                        'subst': sub_include.get('subst') or ''}
-                r = _read_resource(_sub)
-                w = _write_resource(*r)
-                i = w.namebase if w else '%'
-                include = '\\include{%s}' % i
-                return subst % include
-
-            try:
-                text = resource_dir.joinpath(name).text()
-            except FileNotFoundError as e:
-                if required or subst in [None, False]:
-                    raise e
-                text = _read_substitute()
-            return name, text
-
-        name, text = _read_resource(resource)
-        if resource.get('output') == 'read':
-            return text
-        return _write_resource(name, text)
-
-
-class PersDict():
-
-    def __new__(cls, path):
-
+    def name_t_persdict(d):
         p_tuple = namedtuple('Person',
-                             ['xml_id', 'indexname',
-                              'indexonly', 'description'])
+             ['xml_id', 'indexname',
+              'indexonly', 'description'])
+        return {xml_id: p_tuple(*person) for xml_id, person in d.items()}
 
-        def _freeze(values):
-            return p_tuple(*values)
-
-        people = map(cls.Person, parser.parse(path).getroot().iter('{*}person'))
-        d = {person.xml_id: person for person in people}
-        for person in d.values():
-            person.update(d)
-        d = {xml_id: _freeze(person._values()) for xml_id, person in d.items()}
-        return d
-
-    def __init__(self):
-        pass
 
     class Person():
         """A person."""
@@ -174,17 +229,15 @@ class PersDict():
             i_and_d = self._indexname_and_description(tag)
             self.indexname, self.description = i_and_d
 
-        def _values(self):
-            return (self.xml_id, self.indexname,
-                    self.indexonly, self.description)
-
-        def update(self, persdict):
+        def __call__(self, persdict):
             """Update description by parsing using persdict."""
             description, trait = self.description
             if trait is not None:
                 parser.transform_tree(trait, persdict, in_body=False)
             trait = self._stripstring(trait)
             self.description = description(trait)
+            return (self.xml_id, self.indexname,
+                    self.indexonly, self.description)
 
         @staticmethod
         def _xml_id(tag):
@@ -197,30 +250,41 @@ class PersDict():
             return iattr or itag
 
         @classmethod
+        def _find_string(cls, parent, query):
+            tags = parent.iter('{*}' + query)
+            matches = (cls._stripstring(m) for m in tags)
+            return ' '.join(matches)
+
+        @classmethod
         def _indexname_and_description(cls, tag):
-            descript_fmt = '{} ({}--{}) {}'.format
-            stripstring = cls._stripstring
+            indexname, name = cls._get_names(tag)
+            dates = cls._get_dates(tag)
+            return indexname, cls._get_partial_description(tag, name, dates)
 
-            def _find_string(parent, query):
-                tags = parent.iter('{*}' + query)
-                matches = (stripstring(m) for m in tags)
-                return ' '.join(matches)
-
-            finder = partial(_find_string, tag.find('{*}persName'))
+        @classmethod
+        def _get_names(cls, tag):
+            namefinder = partial(cls._find_string, tag.find('{*}persName'))
             nametags = ['forename', 'addName', 'surname']
-            firstnames, addnames, surnames = map(finder, nametags)
+            firstnames, addnames, surnames = map(namefinder, nametags)
             addnames = "`%s'" % addnames if addnames else ''
             all_names = [' '.join([firstnames, addnames]), surnames]
             indexname = ', '.join(reversed(all_names)).strip()
             name = ' '.join(all_names).strip()
+            return indexname, name
 
-            date_finder = partial(_find_string, tag)
+        @classmethod
+        def _get_dates(cls, tag):
+            date_finder = partial(cls._find_string, tag)
             date_targets = ['birth', 'death']
-            dates = map(date_finder, date_targets)
+            return map(date_finder, date_targets)
 
+        @staticmethod
+        def _get_partial_description(tag, name, dates):
+            descript_fmt = '{} ({}--{}) {}'.format
             descript_part = partial(descript_fmt, name, *dates)
             trait_tag = tag.find('{*}trait')
-            return indexname, (descript_part, trait_tag)
+            return descript_part, trait_tag
+
 
         @staticmethod
         def _stripstring(tag):
